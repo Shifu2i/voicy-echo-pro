@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Mic, Square } from 'lucide-react';
 import { toast } from 'sonner';
@@ -9,95 +9,83 @@ interface VoiceRecorderProps {
 
 export const VoiceRecorder = ({ onTranscription }: VoiceRecorderProps) => {
   const [isRecording, setIsRecording] = useState(false);
-  const [isProcessing, setIsProcessing] = useState(false);
-  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
-  const audioChunksRef = useRef<Blob[]>([]);
+  const [isSupported, setIsSupported] = useState(true);
+  const recognitionRef = useRef<any>(null);
 
-  const startRecording = async () => {
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ 
-        audio: {
-          sampleRate: 24000,
-          channelCount: 1,
-          echoCancellation: true,
-          noiseSuppression: true,
-          autoGainControl: true
-        } 
-      });
+  useEffect(() => {
+    // Check if Web Speech API is supported
+    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    
+    if (!SpeechRecognition) {
+      setIsSupported(false);
+      return;
+    }
 
-      const mediaRecorder = new MediaRecorder(stream, {
-        mimeType: 'audio/webm'
-      });
+    // Initialize speech recognition
+    const recognition = new SpeechRecognition();
+    recognition.continuous = true;
+    recognition.interimResults = true;
+    recognition.lang = 'en-US';
+
+    recognition.onresult = (event: any) => {
+      let finalTranscript = '';
       
-      mediaRecorderRef.current = mediaRecorder;
-      audioChunksRef.current = [];
-
-      mediaRecorder.ondataavailable = (event) => {
-        if (event.data.size > 0) {
-          audioChunksRef.current.push(event.data);
+      for (let i = event.resultIndex; i < event.results.length; i++) {
+        const transcript = event.results[i][0].transcript;
+        if (event.results[i].isFinal) {
+          finalTranscript += transcript + ' ';
         }
-      };
+      }
 
-      mediaRecorder.onstop = async () => {
-        const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
-        await processAudio(audioBlob);
-        
-        stream.getTracks().forEach(track => track.stop());
-      };
+      if (finalTranscript) {
+        onTranscription(finalTranscript);
+      }
+    };
 
-      mediaRecorder.start();
+    recognition.onerror = (event: any) => {
+      console.error('Speech recognition error:', event.error);
+      if (event.error === 'no-speech') {
+        toast.error('No speech detected. Please try again.');
+      } else if (event.error === 'not-allowed') {
+        toast.error('Microphone access denied. Please allow microphone access.');
+      } else {
+        toast.error('Speech recognition error. Please try again.');
+      }
+      setIsRecording(false);
+    };
+
+    recognition.onend = () => {
+      if (isRecording) {
+        setIsRecording(false);
+      }
+    };
+
+    recognitionRef.current = recognition;
+  }, [onTranscription, isRecording]);
+
+  const startRecording = () => {
+    if (!isSupported) {
+      toast.error('Speech recognition is not supported in this browser. Please use Chrome, Edge, or Safari.');
+      return;
+    }
+
+    try {
+      recognitionRef.current?.start();
       setIsRecording(true);
-      toast.success('Recording started');
+      toast.success('Recording started - speak now');
     } catch (error) {
-      console.error('Error accessing microphone:', error);
-      toast.error('Could not access microphone. Please check permissions.');
+      console.error('Error starting recording:', error);
+      toast.error('Could not start recording. Please try again.');
     }
   };
 
   const stopRecording = () => {
-    if (mediaRecorderRef.current && isRecording) {
-      mediaRecorderRef.current.stop();
-      setIsRecording(false);
-      setIsProcessing(true);
-    }
-  };
-
-  const processAudio = async (audioBlob: Blob) => {
     try {
-      const reader = new FileReader();
-      reader.readAsDataURL(audioBlob);
-      
-      reader.onloadend = async () => {
-        const base64Audio = reader.result?.toString().split(',')[1];
-        
-        if (!base64Audio) {
-          throw new Error('Failed to encode audio');
-        }
-
-        const response = await fetch(
-          `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/transcribe-audio`,
-          {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({ audio: base64Audio })
-          }
-        );
-
-        if (!response.ok) {
-          throw new Error('Transcription failed');
-        }
-
-        const data = await response.json();
-        onTranscription(data.text);
-        toast.success('Transcription complete');
-      };
+      recognitionRef.current?.stop();
+      setIsRecording(false);
+      toast.success('Recording stopped');
     } catch (error) {
-      console.error('Error processing audio:', error);
-      toast.error('Failed to transcribe audio');
-    } finally {
-      setIsProcessing(false);
+      console.error('Error stopping recording:', error);
     }
   };
 
@@ -105,7 +93,7 @@ export const VoiceRecorder = ({ onTranscription }: VoiceRecorderProps) => {
     <div className="flex items-center gap-3">
       <Button
         onClick={isRecording ? stopRecording : startRecording}
-        disabled={isProcessing}
+        disabled={!isSupported}
         variant={isRecording ? 'destructive' : 'default'}
         size="lg"
         className={`
@@ -121,7 +109,7 @@ export const VoiceRecorder = ({ onTranscription }: VoiceRecorderProps) => {
         ) : (
           <>
             <Mic className="mr-2 h-5 w-5" />
-            {isProcessing ? 'Processing...' : 'Start Recording'}
+            Start Recording
           </>
         )}
       </Button>

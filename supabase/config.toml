@@ -3,8 +3,5 @@ project_id = "vpuzzcerqxqinouqjodq"
 [auth]
 enabled = true
 
-[functions.transcribe-audio]
-verify_jwt = false
-
 [functions.edit-text]
 verify_jwt = false
