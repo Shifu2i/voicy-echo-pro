@@ -44,14 +44,21 @@ export const VoiceRecorder = ({ onTranscription }: VoiceRecorderProps) => {
 
     recognition.onerror = (event: any) => {
       console.error('Speech recognition error:', event.error);
+      
       if (event.error === 'no-speech') {
-        toast.error('No speech detected. Please try again.');
+        toast.error('No speech detected. Please try speaking.');
       } else if (event.error === 'not-allowed') {
-        toast.error('Microphone access denied. Please allow microphone access.');
+        toast.error('Microphone access denied. Please allow microphone access in your browser settings.');
+      } else if (event.error === 'network') {
+        toast.error('Network error. Please check your internet connection and try again.');
+        setIsRecording(false);
+      } else if (event.error === 'aborted') {
+        // User stopped recording, no error needed
+        setIsRecording(false);
       } else {
-        toast.error('Speech recognition error. Please try again.');
+        toast.error(`Recognition error: ${event.error}. Please try again.`);
+        setIsRecording(false);
       }
-      setIsRecording(false);
     };
 
     recognition.onend = () => {
