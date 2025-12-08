@@ -92,7 +92,7 @@ const Index = () => {
             </div>
             <div>
               <p className="text-xs text-muted-foreground leading-relaxed">
-                Your audio is never stored. All processing happens in real-time.
+                100% offline voice recognition. Your audio never leaves your device.
               </p>
             </div>
           </div>
