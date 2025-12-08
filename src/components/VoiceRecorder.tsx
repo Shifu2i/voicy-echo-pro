@@ -1,7 +1,9 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
 import { Mic, Square } from 'lucide-react';
 import { toast } from 'sonner';
+import { ModelLoader } from './ModelLoader';
+import { VoskRecognizer, isModelLoaded } from '@/services/voskRecognition';
 
 interface VoiceRecorderProps {
   onTranscription: (text: string) => void;
@@ -9,117 +11,91 @@ interface VoiceRecorderProps {
 
 export const VoiceRecorder = ({ onTranscription }: VoiceRecorderProps) => {
   const [isRecording, setIsRecording] = useState(false);
-  const [isSupported, setIsSupported] = useState(true);
-  const recognitionRef = useRef<any>(null);
+  const [isModelReady, setIsModelReady] = useState(isModelLoaded());
+  const [partialText, setPartialText] = useState('');
+  const recognizerRef = useRef<VoskRecognizer | null>(null);
 
-  useEffect(() => {
-    // Check if Web Speech API is supported
-    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-    
-    if (!SpeechRecognition) {
-      setIsSupported(false);
-      return;
+  const handleResult = useCallback((text: string, isFinal: boolean) => {
+    if (isFinal) {
+      onTranscription(text + ' ');
+      setPartialText('');
+    } else {
+      setPartialText(text);
     }
+  }, [onTranscription]);
 
-    // Initialize speech recognition
-    const recognition = new SpeechRecognition();
-    recognition.continuous = true;
-    recognition.interimResults = true;
-    recognition.lang = 'en-US';
-
-    recognition.onresult = (event: any) => {
-      let finalTranscript = '';
-      
-      for (let i = event.resultIndex; i < event.results.length; i++) {
-        const transcript = event.results[i][0].transcript;
-        if (event.results[i].isFinal) {
-          finalTranscript += transcript + ' ';
-        }
-      }
-
-      if (finalTranscript) {
-        onTranscription(finalTranscript);
-      }
-    };
-
-    recognition.onerror = (event: any) => {
-      console.error('Speech recognition error:', event.error);
-      
-      if (event.error === 'no-speech') {
-        toast.error('No speech detected. Please try speaking.');
-      } else if (event.error === 'not-allowed') {
-        toast.error('Microphone access denied. Please allow microphone access in your browser settings.');
-      } else if (event.error === 'network') {
-        toast.error('Network error. Please check your internet connection and try again.');
-        setIsRecording(false);
-      } else if (event.error === 'aborted') {
-        // User stopped recording, no error needed
-        setIsRecording(false);
-      } else {
-        toast.error(`Recognition error: ${event.error}. Please try again.`);
-        setIsRecording(false);
-      }
-    };
-
-    recognition.onend = () => {
-      if (isRecording) {
-        setIsRecording(false);
-      }
-    };
-
-    recognitionRef.current = recognition;
-  }, [onTranscription, isRecording]);
-
-  const startRecording = () => {
-    if (!isSupported) {
-      toast.error('Speech recognition is not supported in this browser. Please use Chrome, Edge, or Safari.');
+  const startRecording = async () => {
+    if (!isModelReady) {
+      toast.error('Voice model is still loading. Please wait.');
       return;
     }
 
     try {
-      recognitionRef.current?.start();
+      recognizerRef.current = new VoskRecognizer(handleResult);
+      await recognizerRef.current.start();
       setIsRecording(true);
       toast.success('Recording started - speak now');
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error starting recording:', error);
-      toast.error('Could not start recording. Please try again.');
+      
+      if (error.name === 'NotAllowedError') {
+        toast.error('Microphone access denied. Please allow microphone access.');
+      } else {
+        toast.error('Could not start recording. Please try again.');
+      }
     }
   };
 
   const stopRecording = () => {
-    try {
-      recognitionRef.current?.stop();
-      setIsRecording(false);
-      toast.success('Recording stopped');
-    } catch (error) {
-      console.error('Error stopping recording:', error);
+    if (recognizerRef.current) {
+      recognizerRef.current.stop();
+      recognizerRef.current = null;
     }
+    setIsRecording(false);
+    setPartialText('');
+    toast.success('Recording stopped');
   };
 
+  const handleModelReady = useCallback(() => {
+    setIsModelReady(true);
+  }, []);
+
   return (
-    <div className="flex items-center gap-3">
-      <Button
-        onClick={isRecording ? stopRecording : startRecording}
-        disabled={!isSupported}
-        variant={isRecording ? 'destructive' : 'default'}
-        size="lg"
-        className={`
-          relative overflow-hidden smooth-transition
-          ${isRecording ? 'recording-pulse glow-recording' : ''}
-        `}
-      >
-        {isRecording ? (
-          <>
-            <Square className="mr-2 h-5 w-5" />
-            Stop Recording
-          </>
-        ) : (
-          <>
-            <Mic className="mr-2 h-5 w-5" />
-            Start Recording
-          </>
-        )}
-      </Button>
+    <div className="flex flex-col gap-4">
+      {!isModelReady && (
+        <ModelLoader onModelReady={handleModelReady} />
+      )}
+      
+      <div className="flex items-center gap-3">
+        <Button
+          onClick={isRecording ? stopRecording : startRecording}
+          disabled={!isModelReady}
+          variant={isRecording ? 'destructive' : 'default'}
+          size="lg"
+          className={`
+            relative overflow-hidden smooth-transition
+            ${isRecording ? 'recording-pulse glow-recording' : ''}
+          `}
+        >
+          {isRecording ? (
+            <>
+              <Square className="mr-2 h-5 w-5" />
+              Stop Recording
+            </>
+          ) : (
+            <>
+              <Mic className="mr-2 h-5 w-5" />
+              {isModelReady ? 'Start Recording' : 'Loading...'}
+            </>
+          )}
+        </Button>
+      </div>
+
+      {partialText && (
+        <div className="p-3 rounded-lg bg-muted/50 border border-border">
+          <p className="text-sm text-muted-foreground italic">{partialText}...</p>
+        </div>
+      )}
     </div>
   );
 };
