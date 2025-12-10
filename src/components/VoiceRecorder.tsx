@@ -73,7 +73,7 @@ export const VoiceRecorder = ({ onTranscription }: VoiceRecorderProps) => {
           variant={isRecording ? 'destructive' : 'default'}
           size="lg"
           className={`
-            relative overflow-hidden smooth-transition
+            relative overflow-hidden smooth-transition w-full py-6 text-base
             ${isRecording ? 'recording-pulse glow-recording' : ''}
           `}
         >
