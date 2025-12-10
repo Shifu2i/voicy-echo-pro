@@ -1,21 +1,15 @@
 import { createModel, KaldiRecognizer, Model } from 'vosk-browser';
 
-const MODEL_URL = 'https://alphacephei.com/vosk/models/vosk-model-small-en-us-0.15.zip';
+// Local model bundled with the app - place in public/models/
+const MODEL_URL = '/models/vosk-model-small-en-us-0.15.zip';
 
 let model: Model | null = null;
 let isModelLoading = false;
 let modelLoadPromise: Promise<Model> | null = null;
 
-export interface VoskProgress {
-  loaded: number;
-  total: number;
-  percent: number;
-}
-
-export type ProgressCallback = (progress: VoskProgress) => void;
 export type ResultCallback = (text: string, isFinal: boolean) => void;
 
-export const loadModel = async (onProgress?: ProgressCallback): Promise<Model> => {
+export const loadModel = async (): Promise<Model> => {
   if (model) return model;
   if (modelLoadPromise) return modelLoadPromise;
 
@@ -29,9 +23,6 @@ export const loadModel = async (onProgress?: ProgressCallback): Promise<Model> =
   try {
     model = await modelLoadPromise;
     isModelLoading = false;
-    if (onProgress) {
-      onProgress({ loaded: 100, total: 100, percent: 100 });
-    }
     return model;
   } catch (error) {
     isModelLoading = false;
