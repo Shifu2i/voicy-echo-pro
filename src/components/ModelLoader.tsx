@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Progress } from '@/components/ui/progress';
-import { Download, CheckCircle, Loader2 } from 'lucide-react';
-import { loadModel, isModelLoaded, VoskProgress } from '@/services/voskRecognition';
+import { Download, CheckCircle, Loader2, HardDrive } from 'lucide-react';
+import { loadModel, isModelLoaded, isModelCached, VoskProgress } from '@/services/voskRecognition';
 
 interface ModelLoaderProps {
   onModelReady: () => void;
@@ -11,6 +11,7 @@ export const ModelLoader = ({ onModelReady }: ModelLoaderProps) => {
   const [progress, setProgress] = useState<VoskProgress | null>(null);
   const [status, setStatus] = useState<'idle' | 'loading' | 'ready' | 'error'>('idle');
   const [error, setError] = useState<string | null>(null);
+  const [isCached, setIsCached] = useState(false);
 
   useEffect(() => {
     if (isModelLoaded()) {
@@ -19,19 +20,24 @@ export const ModelLoader = ({ onModelReady }: ModelLoaderProps) => {
       return;
     }
 
-    setStatus('loading');
-    
-    loadModel((progress) => {
-      setProgress(progress);
-    })
-      .then(() => {
+    const init = async () => {
+      const cached = await isModelCached();
+      setIsCached(cached);
+      setStatus('loading');
+      
+      try {
+        await loadModel((progress) => {
+          setProgress(progress);
+        });
         setStatus('ready');
         onModelReady();
-      })
-      .catch((err) => {
+      } catch (err: any) {
         setStatus('error');
         setError(err.message || 'Failed to load voice recognition model');
-      });
+      }
+    };
+    
+    init();
   }, [onModelReady]);
 
   if (status === 'ready') {
@@ -60,22 +66,24 @@ export const ModelLoader = ({ onModelReady }: ModelLoaderProps) => {
   return (
     <div className="p-4 rounded-xl bg-card border border-border smooth-transition">
       <div className="flex items-center gap-3 mb-3">
-        {progress ? (
+        {isCached ? (
+          <HardDrive className="h-5 w-5 text-primary animate-pulse" />
+        ) : progress ? (
           <Download className="h-5 w-5 text-primary animate-pulse" />
         ) : (
           <Loader2 className="h-5 w-5 text-primary animate-spin" />
         )}
         <div>
           <p className="text-sm font-medium text-foreground">
-            {progress ? 'Downloading voice model...' : 'Initializing...'}
+            {isCached ? 'Loading from cache...' : progress ? 'Downloading voice model...' : 'Initializing...'}
           </p>
           <p className="text-xs text-muted-foreground">
-            One-time download for offline use
+            {isCached ? 'Using cached offline model' : 'One-time download for offline use'}
           </p>
         </div>
       </div>
       
-      {progress && (
+      {progress && !isCached && (
         <div className="space-y-2">
           <Progress value={progress.percent} className="h-2" />
           <div className="flex justify-between text-xs text-muted-foreground">

@@ -1,6 +1,9 @@
 import { createModel, KaldiRecognizer, Model } from 'vosk-browser';
 
 const MODEL_URL = 'https://alphacephei.com/vosk/models/vosk-model-small-en-us-0.15.zip';
+const CACHE_DB_NAME = 'vosk-model-cache';
+const CACHE_STORE_NAME = 'models';
+const MODEL_KEY = 'vosk-model-small-en-us-0.15';
 
 let model: Model | null = null;
 let isModelLoading = false;
@@ -15,6 +18,85 @@ export interface VoskProgress {
 export type ProgressCallback = (progress: VoskProgress) => void;
 export type ResultCallback = (text: string, isFinal: boolean) => void;
 
+const openDB = (): Promise<IDBDatabase> => {
+  return new Promise((resolve, reject) => {
+    const request = indexedDB.open(CACHE_DB_NAME, 1);
+    request.onerror = () => reject(request.error);
+    request.onsuccess = () => resolve(request.result);
+    request.onupgradeneeded = (event) => {
+      const db = (event.target as IDBOpenDBRequest).result;
+      if (!db.objectStoreNames.contains(CACHE_STORE_NAME)) {
+        db.createObjectStore(CACHE_STORE_NAME);
+      }
+    };
+  });
+};
+
+const getCachedModel = async (): Promise<ArrayBuffer | null> => {
+  try {
+    const db = await openDB();
+    return new Promise((resolve, reject) => {
+      const transaction = db.transaction(CACHE_STORE_NAME, 'readonly');
+      const store = transaction.objectStore(CACHE_STORE_NAME);
+      const request = store.get(MODEL_KEY);
+      request.onerror = () => reject(request.error);
+      request.onsuccess = () => resolve(request.result || null);
+    });
+  } catch {
+    return null;
+  }
+};
+
+const cacheModel = async (data: ArrayBuffer): Promise<void> => {
+  try {
+    const db = await openDB();
+    return new Promise((resolve, reject) => {
+      const transaction = db.transaction(CACHE_STORE_NAME, 'readwrite');
+      const store = transaction.objectStore(CACHE_STORE_NAME);
+      const request = store.put(data, MODEL_KEY);
+      request.onerror = () => reject(request.error);
+      request.onsuccess = () => resolve();
+    });
+  } catch {
+    console.warn('Failed to cache model');
+  }
+};
+
+const downloadModel = async (onProgress?: ProgressCallback): Promise<ArrayBuffer> => {
+  const response = await fetch(MODEL_URL);
+  if (!response.ok) throw new Error('Failed to download model');
+  
+  const contentLength = response.headers.get('content-length');
+  const total = contentLength ? parseInt(contentLength, 10) : 0;
+  
+  const reader = response.body?.getReader();
+  if (!reader) throw new Error('Failed to read response');
+  
+  const chunks: Uint8Array[] = [];
+  let loaded = 0;
+  
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    
+    chunks.push(value);
+    loaded += value.length;
+    
+    if (onProgress && total > 0) {
+      onProgress({ loaded, total, percent: Math.round((loaded / total) * 100) });
+    }
+  }
+  
+  const result = new Uint8Array(loaded);
+  let offset = 0;
+  for (const chunk of chunks) {
+    result.set(chunk, offset);
+    offset += chunk.length;
+  }
+  
+  return result.buffer;
+};
+
 export const loadModel = async (onProgress?: ProgressCallback): Promise<Model> => {
   if (model) return model;
   if (modelLoadPromise) return modelLoadPromise;
@@ -22,16 +104,32 @@ export const loadModel = async (onProgress?: ProgressCallback): Promise<Model> =
   isModelLoading = true;
   
   modelLoadPromise = (async () => {
-    const loadedModel = await createModel(MODEL_URL);
+    // Check cache first
+    const cachedData = await getCachedModel();
+    
+    if (cachedData) {
+      if (onProgress) onProgress({ loaded: 100, total: 100, percent: 100 });
+      const blob = new Blob([cachedData], { type: 'application/zip' });
+      const blobUrl = URL.createObjectURL(blob);
+      const loadedModel = await createModel(blobUrl);
+      URL.revokeObjectURL(blobUrl);
+      return loadedModel;
+    }
+    
+    // Download and cache
+    const modelData = await downloadModel(onProgress);
+    await cacheModel(modelData);
+    
+    const blob = new Blob([modelData], { type: 'application/zip' });
+    const blobUrl = URL.createObjectURL(blob);
+    const loadedModel = await createModel(blobUrl);
+    URL.revokeObjectURL(blobUrl);
     return loadedModel;
   })();
 
   try {
     model = await modelLoadPromise;
     isModelLoading = false;
-    if (onProgress) {
-      onProgress({ loaded: 100, total: 100, percent: 100 });
-    }
     return model;
   } catch (error) {
     isModelLoading = false;
@@ -42,6 +140,10 @@ export const loadModel = async (onProgress?: ProgressCallback): Promise<Model> =
 
 export const isModelLoaded = (): boolean => !!model;
 export const isLoading = (): boolean => isModelLoading;
+export const isModelCached = async (): Promise<boolean> => {
+  const cached = await getCachedModel();
+  return cached !== null;
+};
 
 export class VoskRecognizer {
   private recognizer: KaldiRecognizer | null = null;
@@ -96,7 +198,6 @@ export class VoskRecognizer {
       this.processorNode.onaudioprocess = (event) => {
         if (this.recognizer && this.isRunning) {
           const inputData = event.inputBuffer.getChannelData(0);
-          // Convert Float32Array to AudioBuffer format expected by VOSK
           const buffer = this.audioContext!.createBuffer(1, inputData.length, this.audioContext!.sampleRate);
           buffer.copyToChannel(inputData, 0);
           this.recognizer.acceptWaveform(buffer);
@@ -118,7 +219,6 @@ export class VoskRecognizer {
     
     this.isRunning = false;
     
-    // Get final result
     if (this.recognizer) {
       this.recognizer.retrieveFinalResult();
     }
