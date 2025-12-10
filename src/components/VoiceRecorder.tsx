@@ -66,7 +66,7 @@ export const VoiceRecorder = ({ onTranscription }: VoiceRecorderProps) => {
         <ModelLoader onModelReady={handleModelReady} />
       )}
       
-      <div className="flex items-center gap-3">
+      <div className="flex items-center justify-center">
         <Button
           onClick={isRecording ? stopRecording : startRecording}
           disabled={!isModelReady}
