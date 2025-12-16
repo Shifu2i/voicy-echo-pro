@@ -1,4 +1,4 @@
-import { X, PenLine, Edit3, Info } from 'lucide-react';
+import { X, PenLine, Edit3, Info, Settings } from 'lucide-react';
 import { useNavigate, useLocation } from 'react-router-dom';
 
 interface SideMenuProps {
@@ -54,6 +54,16 @@ export const SideMenu = ({ isOpen, onClose, text = '' }: SideMenuProps) => {
           >
             <Edit3 className="w-5 h-5" />
             <span className="font-medium">Edit</span>
+          </button>
+
+          <button
+            onClick={() => handleNavigate('/settings')}
+            className={`flex items-center gap-3 w-full p-3 rounded-lg transition-colors ${
+              location.pathname === '/settings' ? 'bg-primary text-primary-foreground' : 'hover:bg-muted'
+            }`}
+          >
+            <Settings className="w-5 h-5" />
+            <span className="font-medium">Settings</span>
           </button>
 
           <button
