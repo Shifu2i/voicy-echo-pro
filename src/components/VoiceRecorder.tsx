@@ -162,24 +162,24 @@ export const VoiceRecorder = ({ onTranscription }: VoiceRecorderProps) => {
           variant={isRecording ? 'destructive' : 'default'}
           size="lg"
           className={`
-            relative overflow-hidden smooth-transition w-full py-6 text-base
+            relative overflow-hidden smooth-transition w-full py-6 text-base rounded-full
             ${isRecording ? 'recording-pulse glow-recording' : ''}
           `}
         >
           {isPolishing ? (
             <>
               <Loader2 className="mr-2 h-5 w-5 animate-spin" />
-              Polishing transcription...
+              Polishing...
             </>
           ) : isRecording ? (
             <>
               <Square className="mr-2 h-5 w-5" />
-              Stop Recording
+              STOP
             </>
           ) : (
             <>
               <Mic className="mr-2 h-5 w-5" />
-              {isModelReady ? 'Start Recording' : 'Loading...'}
+              {isModelReady ? 'DICTATE' : 'Loading...'}
             </>
           )}
         </Button>
