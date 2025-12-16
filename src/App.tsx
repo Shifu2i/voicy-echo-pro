@@ -6,6 +6,7 @@ import { BrowserRouter, Routes, Route } from "react-router-dom";
 import Splash from "./pages/Splash";
 import Index from "./pages/Index";
 import Edit from "./pages/Edit";
+import Settings from "./pages/Settings";
 import Info from "./pages/Info";
 import NotFound from "./pages/NotFound";
 
@@ -21,6 +22,7 @@ const App = () => (
           <Route path="/" element={<Splash />} />
           <Route path="/write" element={<Index />} />
           <Route path="/edit" element={<Edit />} />
+          <Route path="/settings" element={<Settings />} />
           <Route path="/info" element={<Info />} />
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
           <Route path="*" element={<NotFound />} />

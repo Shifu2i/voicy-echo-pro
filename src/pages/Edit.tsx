@@ -3,6 +3,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Menu } from 'lucide-react';
 import { useLocation } from 'react-router-dom';
 import { SideMenu } from '@/components/SideMenu';
+import { BottomTabs } from '@/components/BottomTabs';
 import { VoiceEditRecorder } from '@/components/VoiceEditRecorder';
 
 const Edit = () => {
@@ -103,7 +104,12 @@ const Edit = () => {
             </button>
           </div>
         )}
+
+        {/* Bottom padding for tabs */}
+        <div className="h-24" />
       </div>
+
+      <BottomTabs text={text} />
 
       <SideMenu 
         isOpen={isMenuOpen} 
