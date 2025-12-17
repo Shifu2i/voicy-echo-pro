@@ -1,5 +1,6 @@
-import { X, PenLine, Edit3, Info, Settings } from 'lucide-react';
+import { X, PenLine, Edit3, Info, Settings, LogIn, UserPlus, Lock } from 'lucide-react';
 import { useNavigate, useLocation } from 'react-router-dom';
+import { useAuth } from '@/contexts/AuthContext';
 
 interface SideMenuProps {
   isOpen: boolean;
@@ -10,11 +11,14 @@ interface SideMenuProps {
 export const SideMenu = ({ isOpen, onClose, text = '' }: SideMenuProps) => {
   const navigate = useNavigate();
   const location = useLocation();
+  const { user, profile } = useAuth();
 
   const handleNavigate = (path: string) => {
     onClose();
     navigate(path, { state: { text } });
   };
+
+  const isPaidUser = profile?.subscription_plan === 'paid';
 
   if (!isOpen) return null;
 
@@ -47,13 +51,14 @@ export const SideMenu = ({ isOpen, onClose, text = '' }: SideMenuProps) => {
           </button>
 
           <button
-            onClick={() => handleNavigate('/edit')}
+            onClick={() => isPaidUser ? handleNavigate('/edit') : handleNavigate('/signup?upgrade=true')}
             className={`flex items-center gap-3 w-full p-3 rounded-lg transition-colors ${
               location.pathname === '/edit' ? 'bg-primary text-primary-foreground' : 'hover:bg-muted'
-            }`}
+            } ${!isPaidUser ? 'opacity-60' : ''}`}
           >
             <Edit3 className="w-5 h-5" />
             <span className="font-medium">Edit</span>
+            {!isPaidUser && <Lock className="w-4 h-4 ml-auto" />}
           </button>
 
           <button
@@ -75,6 +80,36 @@ export const SideMenu = ({ isOpen, onClose, text = '' }: SideMenuProps) => {
             <Info className="w-5 h-5" />
             <span className="font-medium">Info</span>
           </button>
+
+          <div className="border-t border-accent/30 my-4" />
+
+          {user ? (
+            <div className="text-sm text-muted-foreground px-3">
+              Signed in as {user.email}
+            </div>
+          ) : (
+            <>
+              <button
+                onClick={() => handleNavigate('/signin')}
+                className={`flex items-center gap-3 w-full p-3 rounded-lg transition-colors ${
+                  location.pathname === '/signin' ? 'bg-primary text-primary-foreground' : 'hover:bg-muted'
+                }`}
+              >
+                <LogIn className="w-5 h-5" />
+                <span className="font-medium">Sign In</span>
+              </button>
+
+              <button
+                onClick={() => handleNavigate('/signup')}
+                className={`flex items-center gap-3 w-full p-3 rounded-lg transition-colors ${
+                  location.pathname === '/signup' ? 'bg-primary text-primary-foreground' : 'hover:bg-muted'
+                }`}
+              >
+                <UserPlus className="w-5 h-5" />
+                <span className="font-medium">Sign Up</span>
+              </button>
+            </>
+          )}
         </nav>
       </div>
     </>

@@ -5,9 +5,11 @@ import { Menu } from 'lucide-react';
 import { useLocation } from 'react-router-dom';
 import { SideMenu } from '@/components/SideMenu';
 import { BottomTabs } from '@/components/BottomTabs';
+import { useAuth } from '@/contexts/AuthContext';
 
 const Index = () => {
   const location = useLocation();
+  const { profile } = useAuth();
   const [text, setText] = useState('');
   const [isMenuOpen, setIsMenuOpen] = useState(false);
 
@@ -20,6 +22,10 @@ const Index = () => {
   const handleTranscription = (transcribedText: string) => {
     setText((prev) => (prev ? `${prev} ${transcribedText}` : transcribedText));
   };
+
+  // Get user's background color preference
+  const backgroundColor = profile?.background_color || '#D8DDE4';
+  const isPaidUser = profile?.subscription_plan === 'paid';
 
   return (
     <div className="min-h-screen bg-background">
@@ -41,12 +47,19 @@ const Index = () => {
         </div>
 
         {/* Text Area */}
-        <div className="bg-muted rounded-3xl p-1">
+        <div 
+          className="rounded-3xl p-1"
+          style={{ backgroundColor: isPaidUser ? backgroundColor : '#D8DDE4' }}
+        >
           <Textarea
             value={text}
             onChange={(e) => setText(e.target.value)}
             placeholder="Start recording or type here..."
             className="min-h-[300px] text-base resize-none border-0 bg-transparent focus-visible:ring-0 rounded-3xl p-4"
+            style={{ 
+              backgroundColor: 'transparent',
+              color: '#000000'
+            }}
           />
         </div>
 
