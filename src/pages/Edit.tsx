@@ -1,24 +1,36 @@
 import { useState, useEffect, useRef } from 'react';
 import { Textarea } from '@/components/ui/textarea';
 import { Menu } from 'lucide-react';
-import { useLocation } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { SideMenu } from '@/components/SideMenu';
 import { BottomTabs } from '@/components/BottomTabs';
 import { VoiceEditRecorder } from '@/components/VoiceEditRecorder';
+import { useAuth } from '@/contexts/AuthContext';
 
 const Edit = () => {
   const location = useLocation();
+  const navigate = useNavigate();
+  const { profile, loading } = useAuth();
   const [text, setText] = useState('');
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [selectedText, setSelectedText] = useState('');
   const [editMode, setEditMode] = useState<'delete' | 'replace' | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
+  const isPaidUser = profile?.subscription_plan === 'paid';
+
   useEffect(() => {
     if (location.state?.text) {
       setText(location.state.text);
     }
   }, [location.state]);
+
+  // Redirect non-paid users
+  useEffect(() => {
+    if (!loading && !isPaidUser) {
+      navigate('/signup?upgrade=true', { state: { text } });
+    }
+  }, [loading, isPaidUser, navigate, text]);
 
   const handleTextSelect = () => {
     if (textareaRef.current) {
@@ -35,6 +47,21 @@ const Edit = () => {
     setSelectedText('');
     setEditMode(null);
   };
+
+  // Get user's background color preference
+  const backgroundColor = profile?.background_color || '#D8DDE4';
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="text-muted-foreground">Loading...</div>
+      </div>
+    );
+  }
+
+  if (!isPaidUser) {
+    return null;
+  }
 
   return (
     <div className="min-h-screen bg-background">
@@ -56,7 +83,10 @@ const Edit = () => {
         </div>
 
         {/* Text Area */}
-        <div className="bg-muted rounded-3xl p-1">
+        <div 
+          className="rounded-3xl p-1"
+          style={{ backgroundColor }}
+        >
           <Textarea
             ref={textareaRef}
             value={text}
@@ -64,6 +94,10 @@ const Edit = () => {
             onSelect={handleTextSelect}
             placeholder="Paste or type your text here to edit..."
             className="min-h-[300px] text-base resize-none border-0 bg-transparent focus-visible:ring-0 rounded-3xl p-4"
+            style={{ 
+              backgroundColor: 'transparent',
+              color: '#000000'
+            }}
           />
         </div>
 
