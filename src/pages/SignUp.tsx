@@ -1,10 +1,8 @@
 import { useState } from 'react';
-import { Menu, Check } from 'lucide-react';
+import { Menu } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
-import { Label } from '@/components/ui/label';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { SideMenu } from '@/components/SideMenu';
@@ -14,7 +12,6 @@ const SignUp = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
-  const [selectedPlan, setSelectedPlan] = useState<'free' | 'paid'>('free');
   const [isLoading, setIsLoading] = useState(false);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
 
@@ -43,28 +40,12 @@ const SignUp = () => {
         password,
         options: {
           emailRedirectTo: redirectUrl,
-          data: {
-            plan: selectedPlan,
-          },
         },
       });
 
       if (error) throw error;
 
       if (data.user) {
-        // Update profile with selected plan
-        const { error: profileError } = await supabase
-          .from('user_profiles')
-          .update({
-            subscription_plan: selectedPlan,
-            subscription_status: selectedPlan === 'free' ? 'active' : 'pending',
-          })
-          .eq('id', data.user.id);
-
-        if (profileError) {
-          console.error('Profile update error:', profileError);
-        }
-
         toast.success('Account created successfully!');
         navigate('/write');
       }
@@ -134,33 +115,6 @@ const SignUp = () => {
             onChange={(e) => setConfirmPassword(e.target.value)}
             className="rounded-2xl bg-muted border-0 py-6"
           />
-
-          {/* Plan Selection */}
-          <div className="space-y-3 pt-2">
-            <Label className="text-sm font-medium">Choose a plan</Label>
-            <RadioGroup value={selectedPlan} onValueChange={(value) => setSelectedPlan(value as 'free' | 'paid')}>
-              <div className="flex items-center space-x-3 p-4 bg-muted rounded-2xl">
-                <RadioGroupItem value="free" id="free" />
-                <Label htmlFor="free" className="flex-1 cursor-pointer">
-                  <div className="font-medium">Free Plan</div>
-                  <div className="text-xs text-muted-foreground">Writing window only</div>
-                </Label>
-                {selectedPlan === 'free' && (
-                  <Check className="w-5 h-5 text-primary" />
-                )}
-              </div>
-              <div className="flex items-center space-x-3 p-4 bg-muted rounded-2xl">
-                <RadioGroupItem value="paid" id="paid" />
-                <Label htmlFor="paid" className="flex-1 cursor-pointer">
-                  <div className="font-medium">Pro Plan</div>
-                  <div className="text-xs text-muted-foreground">$5/month - All features</div>
-                </Label>
-                {selectedPlan === 'paid' && (
-                  <Check className="w-5 h-5 text-primary" />
-                )}
-              </div>
-            </RadioGroup>
-          </div>
         </div>
 
         {/* Google Sign Up Button */}

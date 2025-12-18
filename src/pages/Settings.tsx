@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Menu, LogOut } from 'lucide-react';
-import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { SideMenu } from '@/components/SideMenu';
 import { BottomTabs } from '@/components/BottomTabs';
 import { Label } from '@/components/ui/label';
@@ -24,70 +24,18 @@ const DYSLEXIA_COLORS = [
 const Settings = () => {
   const location = useLocation();
   const navigate = useNavigate();
-  const [searchParams] = useSearchParams();
   const { user, profile, signOut, refreshProfile } = useAuth();
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const text = location.state?.text || '';
   
   const [backgroundColor, setBackgroundColor] = useState('#FFFAF0');
   const [isSaving, setIsSaving] = useState(false);
-  const [isCheckingOut, setIsCheckingOut] = useState(false);
 
   useEffect(() => {
     if (profile) {
       setBackgroundColor(profile.background_color || '#FFFAF0');
     }
   }, [profile]);
-
-  // Handle successful payment redirect
-  useEffect(() => {
-    if (searchParams.get('success') === 'true') {
-      toast.success('Payment successful! Welcome to Pro!');
-      checkSubscription();
-    } else if (searchParams.get('canceled') === 'true') {
-      toast.info('Payment canceled');
-    }
-  }, [searchParams]);
-
-  const checkSubscription = async () => {
-    try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) return;
-
-      await supabase.functions.invoke('check-subscription', {
-        headers: { Authorization: `Bearer ${session.access_token}` }
-      });
-      await refreshProfile();
-    } catch (error) {
-      console.error('Error checking subscription:', error);
-    }
-  };
-
-  const handleUpgrade = async () => {
-    if (!user) {
-      navigate('/signin');
-      return;
-    }
-
-    setIsCheckingOut(true);
-    try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) throw new Error('Not authenticated');
-
-      const { data, error } = await supabase.functions.invoke('create-checkout', {
-        headers: { Authorization: `Bearer ${session.access_token}` }
-      });
-
-      if (error) throw error;
-      if (data?.url) {
-        window.open(data.url, '_blank');
-      }
-    } catch (error: any) {
-      toast.error(error.message || 'Failed to start checkout');
-    } finally {
-      setIsCheckingOut(false);
-    }
-  };
 
   const handleSaveColor = async (color: string) => {
     if (!user) {
@@ -121,8 +69,6 @@ const Settings = () => {
     navigate('/');
   };
 
-  const isPaidUser = profile?.subscription_plan === 'paid';
-
   return (
     <div className="min-h-screen bg-background">
       <div className="max-w-md mx-auto px-4 py-6 space-y-6">
@@ -152,26 +98,8 @@ const Settings = () => {
             </p>
           </div>
 
-          {/* Subscription */}
-          <div className="bg-muted rounded-2xl p-4">
-            <label className="text-sm font-medium text-foreground">Plan</label>
-            <p className="text-xs text-muted-foreground mt-1">
-              {isPaidUser ? 'Pro Plan - All features' : 'Free Plan - Writing only'}
-            </p>
-            {!isPaidUser && user && (
-              <Button
-                onClick={handleUpgrade}
-                disabled={isCheckingOut}
-                className="mt-2 w-full bg-primary text-primary-foreground rounded-xl"
-                size="sm"
-              >
-                {isCheckingOut ? 'Loading...' : 'Upgrade to Pro - $5/month'}
-              </Button>
-            )}
-          </div>
-
-          {/* Background Color - Only for paid users */}
-          {isPaidUser ? (
+          {/* Background Color */}
+          {user && (
             <div className="bg-muted rounded-2xl p-4">
               <Label className="text-sm font-medium text-foreground">
                 Reading Background Color
@@ -197,15 +125,6 @@ const Settings = () => {
               </div>
               <p className="text-xs text-muted-foreground mt-2 text-center">
                 {DYSLEXIA_COLORS.find(c => c.value === backgroundColor)?.name || 'Custom'}
-              </p>
-            </div>
-          ) : (
-            <div className="bg-muted rounded-2xl p-4 opacity-60">
-              <Label className="text-sm font-medium text-foreground">
-                Reading Background Color
-              </Label>
-              <p className="text-xs text-muted-foreground mt-1">
-                Upgrade to Pro to customize colors
               </p>
             </div>
           )}

@@ -58,16 +58,6 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     }
   };
 
-  const checkSubscription = async (accessToken: string) => {
-    try {
-      await supabase.functions.invoke('check-subscription', {
-        headers: { Authorization: `Bearer ${accessToken}` }
-      });
-    } catch (error) {
-      console.error('Error checking subscription:', error);
-    }
-  };
-
   const refreshProfile = async () => {
     if (user) {
       await fetchProfile(user.id);
@@ -84,11 +74,6 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         if (session?.user) {
           setTimeout(async () => {
             await fetchProfile(session.user.id);
-            // Check subscription status on login
-            if (event === 'SIGNED_IN') {
-              await checkSubscription(session.access_token);
-              await fetchProfile(session.user.id);
-            }
           }, 0);
         } else {
           setProfile(null);
@@ -102,7 +87,6 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       setSession(session);
       setUser(session?.user ?? null);
       if (session?.user) {
-        await checkSubscription(session.access_token);
         await fetchProfile(session.user.id);
         setLoading(false);
       } else {
