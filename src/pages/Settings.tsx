@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Menu, LogOut } from 'lucide-react';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { SideMenu } from '@/components/SideMenu';
 import { BottomTabs } from '@/components/BottomTabs';
 import { Label } from '@/components/ui/label';
@@ -24,18 +24,70 @@ const DYSLEXIA_COLORS = [
 const Settings = () => {
   const location = useLocation();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const { user, profile, signOut, refreshProfile } = useAuth();
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const text = location.state?.text || '';
   
   const [backgroundColor, setBackgroundColor] = useState('#FFFAF0');
   const [isSaving, setIsSaving] = useState(false);
+  const [isCheckingOut, setIsCheckingOut] = useState(false);
 
   useEffect(() => {
     if (profile) {
       setBackgroundColor(profile.background_color || '#FFFAF0');
     }
   }, [profile]);
+
+  // Handle successful payment redirect
+  useEffect(() => {
+    if (searchParams.get('success') === 'true') {
+      toast.success('Payment successful! Welcome to Pro!');
+      checkSubscription();
+    } else if (searchParams.get('canceled') === 'true') {
+      toast.info('Payment canceled');
+    }
+  }, [searchParams]);
+
+  const checkSubscription = async () => {
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return;
+
+      await supabase.functions.invoke('check-subscription', {
+        headers: { Authorization: `Bearer ${session.access_token}` }
+      });
+      await refreshProfile();
+    } catch (error) {
+      console.error('Error checking subscription:', error);
+    }
+  };
+
+  const handleUpgrade = async () => {
+    if (!user) {
+      navigate('/signin');
+      return;
+    }
+
+    setIsCheckingOut(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) throw new Error('Not authenticated');
+
+      const { data, error } = await supabase.functions.invoke('create-checkout', {
+        headers: { Authorization: `Bearer ${session.access_token}` }
+      });
+
+      if (error) throw error;
+      if (data?.url) {
+        window.open(data.url, '_blank');
+      }
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to start checkout');
+    } finally {
+      setIsCheckingOut(false);
+    }
+  };
 
   const handleSaveColor = async (color: string) => {
     if (!user) {
@@ -108,11 +160,12 @@ const Settings = () => {
             </p>
             {!isPaidUser && user && (
               <Button
-                onClick={() => navigate('/signup?upgrade=true')}
+                onClick={handleUpgrade}
+                disabled={isCheckingOut}
                 className="mt-2 w-full bg-primary text-primary-foreground rounded-xl"
                 size="sm"
               >
-                Upgrade to Pro - $5/month
+                {isCheckingOut ? 'Loading...' : 'Upgrade to Pro - $5/month'}
               </Button>
             )}
           </div>
