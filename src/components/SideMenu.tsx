@@ -1,4 +1,4 @@
-import { X, PenLine, Edit3, Info, Settings, LogIn, UserPlus, Lock } from 'lucide-react';
+import { X, PenLine, Edit3, Info, Settings, LogIn, UserPlus } from 'lucide-react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 
@@ -11,14 +11,12 @@ interface SideMenuProps {
 export const SideMenu = ({ isOpen, onClose, text = '' }: SideMenuProps) => {
   const navigate = useNavigate();
   const location = useLocation();
-  const { user, profile } = useAuth();
+  const { user } = useAuth();
 
   const handleNavigate = (path: string) => {
     onClose();
     navigate(path, { state: { text } });
   };
-
-  const isPaidUser = profile?.subscription_plan === 'paid';
 
   if (!isOpen) return null;
 
@@ -51,14 +49,13 @@ export const SideMenu = ({ isOpen, onClose, text = '' }: SideMenuProps) => {
           </button>
 
           <button
-            onClick={() => isPaidUser ? handleNavigate('/edit') : handleNavigate('/signup?upgrade=true')}
+            onClick={() => handleNavigate('/edit')}
             className={`flex items-center gap-3 w-full p-3 rounded-lg transition-colors ${
               location.pathname === '/edit' ? 'bg-primary text-primary-foreground' : 'hover:bg-muted'
-            } ${!isPaidUser ? 'opacity-60' : ''}`}
+            }`}
           >
             <Edit3 className="w-5 h-5" />
             <span className="font-medium">Edit</span>
-            {!isPaidUser && <Lock className="w-4 h-4 ml-auto" />}
           </button>
 
           <button
