@@ -5,6 +5,7 @@ import { SideMenu } from '@/components/SideMenu';
 import { BottomTabs } from '@/components/BottomTabs';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
@@ -29,13 +30,42 @@ const Settings = () => {
   const text = location.state?.text || '';
   
   const [backgroundColor, setBackgroundColor] = useState('#FFFAF0');
+  const [customHex, setCustomHex] = useState('');
+  const [hexError, setHexError] = useState('');
   const [isSaving, setIsSaving] = useState(false);
+
+  const isValidHex = (hex: string) => /^#([A-Fa-f0-9]{6}|[A-Fa-f0-9]{3})$/.test(hex);
 
   useEffect(() => {
     if (profile) {
       setBackgroundColor(profile.background_color || '#FFFAF0');
+      // If profile color is not a preset, show it in the custom input
+      const isPreset = DYSLEXIA_COLORS.some(c => c.value === profile.background_color);
+      if (!isPreset && profile.background_color) {
+        setCustomHex(profile.background_color);
+      }
     }
   }, [profile]);
+
+  const handleHexInputChange = (value: string) => {
+    // Auto-add # if missing
+    let hex = value.startsWith('#') ? value : `#${value}`;
+    setCustomHex(hex);
+    
+    if (hex.length > 1 && !isValidHex(hex)) {
+      setHexError('Invalid hex format (e.g., #FF5733)');
+    } else {
+      setHexError('');
+    }
+  };
+
+  const handleSaveCustomColor = async () => {
+    if (!isValidHex(customHex)) {
+      setHexError('Please enter a valid hex color');
+      return;
+    }
+    await handleSaveColor(customHex);
+  };
 
   const handleSaveColor = async (color: string) => {
     if (!user) {
@@ -126,6 +156,37 @@ const Settings = () => {
               <p className="text-xs text-muted-foreground mt-2 text-center">
                 {DYSLEXIA_COLORS.find(c => c.value === backgroundColor)?.name || 'Custom'}
               </p>
+
+              {/* Custom Hex Input */}
+              <div className="mt-4 pt-4 border-t border-border/50">
+                <Label className="text-xs text-muted-foreground mb-2 block">
+                  Custom Hex Color
+                </Label>
+                <div className="flex gap-2 items-center">
+                  <div 
+                    className="w-10 h-10 rounded-lg border-2 border-border shrink-0"
+                    style={{ backgroundColor: isValidHex(customHex) ? customHex : '#FFFFFF' }}
+                  />
+                  <Input
+                    type="text"
+                    placeholder="#FF5733"
+                    value={customHex}
+                    onChange={(e) => handleHexInputChange(e.target.value)}
+                    className="flex-1 font-mono uppercase"
+                    maxLength={7}
+                  />
+                  <Button
+                    onClick={handleSaveCustomColor}
+                    disabled={isSaving || !isValidHex(customHex)}
+                    size="sm"
+                  >
+                    Save
+                  </Button>
+                </div>
+                {hexError && (
+                  <p className="text-xs text-destructive mt-1">{hexError}</p>
+                )}
+              </div>
             </div>
           )}
 
