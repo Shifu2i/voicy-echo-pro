@@ -2,7 +2,7 @@ import { useState, useRef, useCallback, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Mic, Square, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
-import { VoskRecognizer, isModelLoaded, loadModel } from '@/services/voskRecognition';
+import { VoskRecognizer, isModelLoaded, loadModel, getSelectedMicrophoneId } from '@/services/voskRecognition';
 import { loadWhisperModel, transcribeAudio, isWhisperLoaded, checkWebGPUSupport } from '@/services/whisperRecognition';
 
 interface VoiceEditRecorderProps {
@@ -56,11 +56,24 @@ export const VoiceEditRecorder = ({ mode, selectedText, onEditComplete, fullText
       recordedTextRef.current = '';
       audioChunksRef.current = [];
 
-      recognizerRef.current = new VoskRecognizer(handleResult);
+      // Get selected microphone
+      const deviceId = getSelectedMicrophoneId();
+
+      // Start VOSK recognizer with selected mic
+      recognizerRef.current = new VoskRecognizer(handleResult, deviceId);
       await recognizerRef.current.start();
 
+      // Build audio constraints with selected device
+      const audioConstraints: MediaTrackConstraints = {
+        echoCancellation: true,
+        noiseSuppression: true
+      };
+      if (deviceId) {
+        audioConstraints.deviceId = { exact: deviceId };
+      }
+
       const stream = await navigator.mediaDevices.getUserMedia({
-        audio: { echoCancellation: true, noiseSuppression: true }
+        audio: audioConstraints
       });
 
       const mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm' });
@@ -84,6 +97,8 @@ export const VoiceEditRecorder = ({ mode, selectedText, onEditComplete, fullText
       console.error('Error starting recording:', error);
       if (error.name === 'NotAllowedError') {
         toast.error('Microphone access denied');
+      } else if (error.name === 'OverconstrainedError') {
+        toast.error('Selected microphone not available');
       } else {
         toast.error('Could not start recording');
       }

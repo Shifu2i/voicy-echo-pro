@@ -1,16 +1,17 @@
 import { useState, useEffect } from 'react';
-import { Menu, LogOut } from 'lucide-react';
+import { Menu, LogOut, Mic } from 'lucide-react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { SideMenu } from '@/components/SideMenu';
 import { BottomTabs } from '@/components/BottomTabs';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 
-// Dyslexia-friendly color options
+// Dyslexia-friendly background color options
 const DYSLEXIA_COLORS = [
   { name: 'Cream', value: '#FFFAF0', textColor: '#000000' },
   { name: 'Soft Blue', value: '#E6F3FF', textColor: '#000000' },
@@ -22,6 +23,16 @@ const DYSLEXIA_COLORS = [
   { name: 'Light Gray', value: '#F5F5F5', textColor: '#000000' },
 ];
 
+// Text color presets
+const TEXT_COLORS = [
+  { name: 'Black', value: '#000000' },
+  { name: 'Dark Gray', value: '#333333' },
+  { name: 'Navy', value: '#1a1a4e' },
+  { name: 'Dark Brown', value: '#3d2914' },
+  { name: 'Dark Green', value: '#1a3d1a' },
+  { name: 'Dark Purple', value: '#2d1a4e' },
+];
+
 const Settings = () => {
   const location = useLocation();
   const navigate = useNavigate();
@@ -29,45 +40,97 @@ const Settings = () => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const text = location.state?.text || '';
   
+  // Background color state
   const [backgroundColor, setBackgroundColor] = useState('#FFFAF0');
-  const [customHex, setCustomHex] = useState('');
-  const [hexError, setHexError] = useState('');
+  const [customBgHex, setCustomBgHex] = useState('');
+  const [bgHexError, setBgHexError] = useState('');
+  
+  // Writing color state
+  const [writingColor, setWritingColor] = useState('#000000');
+  const [customTextHex, setCustomTextHex] = useState('');
+  const [textHexError, setTextHexError] = useState('');
+  
+  // Microphone state
+  const [audioDevices, setAudioDevices] = useState<MediaDeviceInfo[]>([]);
+  const [selectedMic, setSelectedMic] = useState<string>('');
+  
   const [isSaving, setIsSaving] = useState(false);
 
   const isValidHex = (hex: string) => /^#([A-Fa-f0-9]{6}|[A-Fa-f0-9]{3})$/.test(hex);
 
+  // Load audio devices
+  useEffect(() => {
+    const loadAudioDevices = async () => {
+      try {
+        // Request permission first to get device labels
+        await navigator.mediaDevices.getUserMedia({ audio: true });
+        const devices = await navigator.mediaDevices.enumerateDevices();
+        const audioInputs = devices.filter(d => d.kind === 'audioinput');
+        setAudioDevices(audioInputs);
+        
+        // Load saved device from localStorage
+        const savedDeviceId = localStorage.getItem('selectedMicrophoneId');
+        if (savedDeviceId && audioInputs.some(d => d.deviceId === savedDeviceId)) {
+          setSelectedMic(savedDeviceId);
+        } else if (audioInputs.length > 0) {
+          setSelectedMic(audioInputs[0].deviceId);
+        }
+      } catch (error) {
+        console.error('Failed to enumerate audio devices:', error);
+      }
+    };
+    
+    loadAudioDevices();
+  }, []);
+
   useEffect(() => {
     if (profile) {
       setBackgroundColor(profile.background_color || '#FFFAF0');
-      // If profile color is not a preset, show it in the custom input
-      const isPreset = DYSLEXIA_COLORS.some(c => c.value === profile.background_color);
-      if (!isPreset && profile.background_color) {
-        setCustomHex(profile.background_color);
+      setWritingColor(profile.writing_color || '#000000');
+      
+      // If profile bg color is not a preset, show it in the custom input
+      const isBgPreset = DYSLEXIA_COLORS.some(c => c.value === profile.background_color);
+      if (!isBgPreset && profile.background_color) {
+        setCustomBgHex(profile.background_color);
+      }
+      
+      // If profile text color is not a preset, show it in the custom input
+      const isTextPreset = TEXT_COLORS.some(c => c.value === profile.writing_color);
+      if (!isTextPreset && profile.writing_color) {
+        setCustomTextHex(profile.writing_color);
       }
     }
   }, [profile]);
 
-  const handleHexInputChange = (value: string) => {
-    // Auto-add # if missing
+  const handleBgHexInputChange = (value: string) => {
     let hex = value.startsWith('#') ? value : `#${value}`;
-    setCustomHex(hex);
-    
-    if (hex.length > 1 && !isValidHex(hex)) {
-      setHexError('Invalid hex format (e.g., #FF5733)');
-    } else {
-      setHexError('');
-    }
+    setCustomBgHex(hex);
+    setBgHexError(hex.length > 1 && !isValidHex(hex) ? 'Invalid hex format (e.g., #FF5733)' : '');
   };
 
-  const handleSaveCustomColor = async () => {
-    if (!isValidHex(customHex)) {
-      setHexError('Please enter a valid hex color');
+  const handleTextHexInputChange = (value: string) => {
+    let hex = value.startsWith('#') ? value : `#${value}`;
+    setCustomTextHex(hex);
+    setTextHexError(hex.length > 1 && !isValidHex(hex) ? 'Invalid hex format (e.g., #333333)' : '');
+  };
+
+  const handleSaveCustomBgColor = async () => {
+    if (!isValidHex(customBgHex)) {
+      setBgHexError('Please enter a valid hex color');
       return;
     }
-    await handleSaveColor(customHex);
+    await handleSaveBackgroundColor(customBgHex);
   };
 
-  const handleSaveColor = async (color: string) => {
+  const handleSaveCustomTextColor = async () => {
+    if (!isValidHex(customTextHex)) {
+      setTextHexError('Please enter a valid hex color');
+      return;
+    }
+    await handleSaveWritingColor(customTextHex);
+  };
+
+  const handleSaveBackgroundColor = async (color: string) => {
     if (!user) {
       toast.error('Please sign in to save settings');
       return;
@@ -85,12 +148,44 @@ const Settings = () => {
       if (error) throw error;
       
       await refreshProfile();
-      toast.success('Color saved!');
+      toast.success('Background color saved!');
     } catch (error: any) {
       toast.error(error.message || 'Failed to save color');
     } finally {
       setIsSaving(false);
     }
+  };
+
+  const handleSaveWritingColor = async (color: string) => {
+    if (!user) {
+      toast.error('Please sign in to save settings');
+      return;
+    }
+
+    setIsSaving(true);
+    setWritingColor(color);
+    
+    try {
+      const { error } = await supabase
+        .from('user_profiles')
+        .update({ writing_color: color })
+        .eq('id', user.id);
+
+      if (error) throw error;
+      
+      await refreshProfile();
+      toast.success('Text color saved!');
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to save color');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleMicChange = (deviceId: string) => {
+    setSelectedMic(deviceId);
+    localStorage.setItem('selectedMicrophoneId', deviceId);
+    toast.success('Microphone saved!');
   };
 
   const handleSignOut = async () => {
@@ -141,7 +236,7 @@ const Settings = () => {
                 {DYSLEXIA_COLORS.map((color) => (
                   <button
                     key={color.value}
-                    onClick={() => handleSaveColor(color.value)}
+                    onClick={() => handleSaveBackgroundColor(color.value)}
                     disabled={isSaving}
                     className={`w-full aspect-square rounded-xl border-2 transition-all ${
                       backgroundColor === color.value
@@ -157,7 +252,7 @@ const Settings = () => {
                 {DYSLEXIA_COLORS.find(c => c.value === backgroundColor)?.name || 'Custom'}
               </p>
 
-              {/* Custom Hex Input */}
+              {/* Custom Background Hex Input */}
               <div className="mt-4 pt-4 border-t border-border/50">
                 <Label className="text-xs text-muted-foreground mb-2 block">
                   Custom Hex Color
@@ -165,30 +260,121 @@ const Settings = () => {
                 <div className="flex gap-2 items-center">
                   <div 
                     className="w-10 h-10 rounded-lg border-2 border-border shrink-0"
-                    style={{ backgroundColor: isValidHex(customHex) ? customHex : '#FFFFFF' }}
+                    style={{ backgroundColor: isValidHex(customBgHex) ? customBgHex : '#FFFFFF' }}
                   />
                   <Input
                     type="text"
                     placeholder="#FF5733"
-                    value={customHex}
-                    onChange={(e) => handleHexInputChange(e.target.value)}
+                    value={customBgHex}
+                    onChange={(e) => handleBgHexInputChange(e.target.value)}
                     className="flex-1 font-mono uppercase"
                     maxLength={7}
                   />
                   <Button
-                    onClick={handleSaveCustomColor}
-                    disabled={isSaving || !isValidHex(customHex)}
+                    onClick={handleSaveCustomBgColor}
+                    disabled={isSaving || !isValidHex(customBgHex)}
                     size="sm"
                   >
                     Save
                   </Button>
                 </div>
-                {hexError && (
-                  <p className="text-xs text-destructive mt-1">{hexError}</p>
+                {bgHexError && (
+                  <p className="text-xs text-destructive mt-1">{bgHexError}</p>
                 )}
               </div>
             </div>
           )}
+
+          {/* Writing/Text Color */}
+          {user && (
+            <div className="bg-muted rounded-2xl p-4">
+              <Label className="text-sm font-medium text-foreground">
+                Text Color
+              </Label>
+              <p className="text-xs text-muted-foreground mt-1 mb-3">
+                Choose your preferred text color for reading
+              </p>
+              <div className="grid grid-cols-6 gap-2">
+                {TEXT_COLORS.map((color) => (
+                  <button
+                    key={color.value}
+                    onClick={() => handleSaveWritingColor(color.value)}
+                    disabled={isSaving}
+                    className={`w-full aspect-square rounded-xl border-2 transition-all ${
+                      writingColor === color.value
+                        ? 'border-primary ring-2 ring-primary ring-offset-2'
+                        : 'border-transparent hover:border-muted-foreground/30'
+                    }`}
+                    style={{ backgroundColor: color.value }}
+                    title={color.name}
+                  />
+                ))}
+              </div>
+              <p className="text-xs text-muted-foreground mt-2 text-center">
+                {TEXT_COLORS.find(c => c.value === writingColor)?.name || 'Custom'}
+              </p>
+
+              {/* Custom Text Hex Input */}
+              <div className="mt-4 pt-4 border-t border-border/50">
+                <Label className="text-xs text-muted-foreground mb-2 block">
+                  Custom Hex Color
+                </Label>
+                <div className="flex gap-2 items-center">
+                  <div 
+                    className="w-10 h-10 rounded-lg border-2 border-border shrink-0"
+                    style={{ backgroundColor: isValidHex(customTextHex) ? customTextHex : '#000000' }}
+                  />
+                  <Input
+                    type="text"
+                    placeholder="#333333"
+                    value={customTextHex}
+                    onChange={(e) => handleTextHexInputChange(e.target.value)}
+                    className="flex-1 font-mono uppercase"
+                    maxLength={7}
+                  />
+                  <Button
+                    onClick={handleSaveCustomTextColor}
+                    disabled={isSaving || !isValidHex(customTextHex)}
+                    size="sm"
+                  >
+                    Save
+                  </Button>
+                </div>
+                {textHexError && (
+                  <p className="text-xs text-destructive mt-1">{textHexError}</p>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Microphone Input */}
+          <div className="bg-muted rounded-2xl p-4">
+            <Label className="text-sm font-medium text-foreground flex items-center gap-2">
+              <Mic className="w-4 h-4" />
+              Microphone Input
+            </Label>
+            <p className="text-xs text-muted-foreground mt-1 mb-3">
+              Select your preferred microphone for voice recording
+            </p>
+            {audioDevices.length > 0 ? (
+              <Select value={selectedMic} onValueChange={handleMicChange}>
+                <SelectTrigger className="w-full bg-background">
+                  <SelectValue placeholder="Select a microphone" />
+                </SelectTrigger>
+                <SelectContent className="bg-background border border-border z-50">
+                  {audioDevices.map((device) => (
+                    <SelectItem key={device.deviceId} value={device.deviceId}>
+                      {device.label || `Microphone ${device.deviceId.slice(0, 8)}`}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            ) : (
+              <p className="text-xs text-muted-foreground">
+                No microphones detected. Please allow microphone access.
+              </p>
+            )}
+          </div>
 
           {/* Voice Model */}
           <div className="bg-muted rounded-2xl p-4">
