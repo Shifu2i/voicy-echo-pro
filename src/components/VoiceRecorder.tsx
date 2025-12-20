@@ -3,7 +3,7 @@ import { Button } from '@/components/ui/button';
 import { Mic, Square, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { ModelLoader } from './ModelLoader';
-import { VoskRecognizer, isModelLoaded } from '@/services/voskRecognition';
+import { VoskRecognizer, isModelLoaded, getSelectedMicrophoneId } from '@/services/voskRecognition';
 import { loadWhisperModel, transcribeAudio, isWhisperLoaded, checkWebGPUSupport } from '@/services/whisperRecognition';
 
 interface VoiceRecorderProps {
@@ -66,13 +66,25 @@ export const VoiceRecorder = ({ onTranscription }: VoiceRecorderProps) => {
       recordedTextRef.current = '';
       audioChunksRef.current = [];
 
-      // Start VOSK recognizer for real-time
-      recognizerRef.current = new VoskRecognizer(handleResult);
+      // Get selected microphone
+      const deviceId = getSelectedMicrophoneId();
+
+      // Start VOSK recognizer for real-time with selected mic
+      recognizerRef.current = new VoskRecognizer(handleResult, deviceId);
       await recognizerRef.current.start();
+
+      // Build audio constraints with selected device
+      const audioConstraints: MediaTrackConstraints = {
+        echoCancellation: true,
+        noiseSuppression: true
+      };
+      if (deviceId) {
+        audioConstraints.deviceId = { exact: deviceId };
+      }
 
       // Also start MediaRecorder to capture audio for Whisper
       const stream = await navigator.mediaDevices.getUserMedia({
-        audio: { echoCancellation: true, noiseSuppression: true }
+        audio: audioConstraints
       });
 
       const mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm' });
@@ -93,6 +105,8 @@ export const VoiceRecorder = ({ onTranscription }: VoiceRecorderProps) => {
       
       if (error.name === 'NotAllowedError') {
         toast.error('Microphone access denied. Please allow microphone access.');
+      } else if (error.name === 'OverconstrainedError') {
+        toast.error('Selected microphone not available. Please check settings.');
       } else {
         toast.error('Could not start recording. Please try again.');
       }

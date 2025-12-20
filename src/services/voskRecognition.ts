@@ -147,9 +147,11 @@ export class VoskRecognizer {
   private processorNode: ScriptProcessorNode | null = null;
   private onResult: ResultCallback;
   private isRunning = false;
+  private deviceId?: string;
 
-  constructor(onResult: ResultCallback) {
+  constructor(onResult: ResultCallback, deviceId?: string) {
     this.onResult = onResult;
+    this.deviceId = deviceId;
   }
 
   async start(): Promise<void> {
@@ -178,12 +180,19 @@ export class VoskRecognizer {
         }
       });
 
+      const audioConstraints: MediaTrackConstraints = {
+        echoCancellation: true,
+        noiseSuppression: true,
+        sampleRate: 16000
+      };
+
+      // Use specific device if provided
+      if (this.deviceId) {
+        audioConstraints.deviceId = { exact: this.deviceId };
+      }
+
       this.mediaStream = await navigator.mediaDevices.getUserMedia({
-        audio: {
-          echoCancellation: true,
-          noiseSuppression: true,
-          sampleRate: 16000
-        }
+        audio: audioConstraints
       });
 
       this.sourceNode = this.audioContext.createMediaStreamSource(this.mediaStream);
@@ -251,3 +260,8 @@ export class VoskRecognizer {
     return this.isRunning;
   }
 }
+
+// Helper to get selected microphone ID from localStorage
+export const getSelectedMicrophoneId = (): string | undefined => {
+  return localStorage.getItem('selectedMicrophoneId') || undefined;
+};
