@@ -1,6 +1,6 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
-import { Mic, Square, Loader2, X, Minus, Pin, PinOff, Settings, Clipboard } from 'lucide-react';
+import { Mic, Square, Loader2, X, Trash2, RefreshCw, Maximize2, Minimize2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { ModelLoader } from './ModelLoader';
 import { VoskRecognizer, isModelLoaded, getSelectedMicrophoneId } from '@/services/voskRecognition';
@@ -32,15 +32,13 @@ export const WidgetView = () => {
   const [isPolishing, setIsPolishing] = useState(false);
   const [partialText, setPartialText] = useState('');
   const [lastTranscription, setLastTranscription] = useState('');
-  const [alwaysOnTop, setAlwaysOnTop] = useState(true);
+  const [isExpanded, setIsExpanded] = useState(false);
   const [whisperStatus, setWhisperStatus] = useState<'idle' | 'loading' | 'ready' | 'unsupported'>('idle');
   
   const recognizerRef = useRef<VoskRecognizer | null>(null);
   const recordedTextRef = useRef<string>('');
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
-
-  const isElectron = !!window.electronAPI?.isElectron;
 
   // Load Whisper model in background
   const loadWhisperInBackground = useCallback(async () => {
@@ -167,8 +165,6 @@ export const WidgetView = () => {
         
         if (polishedText && polishedText.trim()) {
           setLastTranscription(polishedText);
-          // The polished version could replace what was already typed
-          // For now, we just update the preview
         }
       } catch (error) {
         console.error('Whisper polish failed:', error);
@@ -191,18 +187,16 @@ export const WidgetView = () => {
     loadWhisperInBackground();
   }, [loadWhisperInBackground]);
 
-  const toggleAlwaysOnTop = async () => {
-    if (window.electronAPI) {
-      const newValue = !alwaysOnTop;
-      window.electronAPI.setAlwaysOnTop(newValue);
-      setAlwaysOnTop(newValue);
-    }
+  const handleDelete = () => {
+    setLastTranscription('');
+    recordedTextRef.current = '';
+    toast.success('Cleared');
   };
 
-  const copyLastTranscription = () => {
+  const handleReplace = () => {
     if (lastTranscription && window.electronAPI) {
       window.electronAPI.copyToClipboard(lastTranscription);
-      toast.success('Copied to clipboard');
+      toast.success('Copied - paste to replace');
     }
   };
 
@@ -215,15 +209,74 @@ export const WidgetView = () => {
       if (isRecording) stopRecording();
     });
 
-    // Get initial always-on-top state
-    window.electronAPI.getAlwaysOnTop().then(setAlwaysOnTop);
-
     return () => {
       unsubscribeToggle();
       unsubscribeStop();
     };
   }, [toggleRecording, isRecording]);
 
+  // Compact floating mode - just 3 buttons
+  if (!isExpanded && !isRecording && isModelReady) {
+    return (
+      <div 
+        className="h-screen w-screen overflow-hidden select-none bg-background/90 backdrop-blur-md rounded-full"
+        style={{ WebkitAppRegion: 'drag' } as React.CSSProperties}
+      >
+        <div 
+          className="h-full flex items-center justify-center gap-2 px-3"
+          style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}
+        >
+          {/* Mic button */}
+          <Button
+            onClick={toggleRecording}
+            variant="ghost"
+            size="icon"
+            className="h-10 w-10 rounded-full hover:bg-primary hover:text-primary-foreground transition-colors"
+            title="Start dictation (Ctrl+Shift+D)"
+          >
+            <Mic className="h-5 w-5" />
+          </Button>
+
+          {/* Delete button */}
+          <Button
+            onClick={handleDelete}
+            variant="ghost"
+            size="icon"
+            className="h-10 w-10 rounded-full hover:bg-destructive hover:text-destructive-foreground transition-colors"
+            title="Clear last transcription"
+            disabled={!lastTranscription}
+          >
+            <Trash2 className="h-5 w-5" />
+          </Button>
+
+          {/* Replace button */}
+          <Button
+            onClick={handleReplace}
+            variant="ghost"
+            size="icon"
+            className="h-10 w-10 rounded-full hover:bg-accent hover:text-accent-foreground transition-colors"
+            title="Copy to clipboard for replace"
+            disabled={!lastTranscription}
+          >
+            <RefreshCw className="h-5 w-5" />
+          </Button>
+
+          {/* Expand button */}
+          <Button
+            onClick={() => setIsExpanded(true)}
+            variant="ghost"
+            size="icon"
+            className="h-8 w-8 rounded-full opacity-50 hover:opacity-100 transition-opacity"
+            title="Expand view"
+          >
+            <Maximize2 className="h-4 w-4" />
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
+  // Expanded mode / Recording mode / Loading mode
   return (
     <div className="h-screen w-screen overflow-hidden select-none">
       {/* Custom titlebar / drag area */}
@@ -243,23 +296,17 @@ export const WidgetView = () => {
           className="flex items-center gap-1"
           style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}
         >
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-5 w-5 hover:bg-muted"
-            onClick={toggleAlwaysOnTop}
-            title={alwaysOnTop ? 'Unpin from top' : 'Pin to top'}
-          >
-            {alwaysOnTop ? <Pin className="h-3 w-3" /> : <PinOff className="h-3 w-3" />}
-          </Button>
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-5 w-5 hover:bg-muted"
-            onClick={() => window.electronAPI?.minimizeWindow()}
-          >
-            <Minus className="h-3 w-3" />
-          </Button>
+          {isModelReady && !isRecording && (
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-5 w-5 hover:bg-muted"
+              onClick={() => setIsExpanded(false)}
+              title="Compact mode"
+            >
+              <Minimize2 className="h-3 w-3" />
+            </Button>
+          )}
           <Button
             variant="ghost"
             size="icon"
@@ -325,15 +372,26 @@ export const WidgetView = () => {
                 <div className="p-2 rounded-md bg-muted/30 border border-border/50">
                   <div className="flex items-center justify-between mb-1">
                     <span className="text-[10px] text-muted-foreground uppercase tracking-wide">Last</span>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-5 w-5"
-                      onClick={copyLastTranscription}
-                      title="Copy to clipboard"
-                    >
-                      <Clipboard className="h-3 w-3" />
-                    </Button>
+                    <div className="flex gap-1">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-5 w-5"
+                        onClick={handleDelete}
+                        title="Delete"
+                      >
+                        <Trash2 className="h-3 w-3" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-5 w-5"
+                        onClick={handleReplace}
+                        title="Copy to replace"
+                      >
+                        <RefreshCw className="h-3 w-3" />
+                      </Button>
+                    </div>
                   </div>
                   <p className="text-xs line-clamp-2">{lastTranscription}</p>
                 </div>
