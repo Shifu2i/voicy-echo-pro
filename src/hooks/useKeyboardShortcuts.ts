@@ -6,7 +6,7 @@ export interface ShortcutConfig {
   replace: string;
 }
 
-const DEFAULT_SHORTCUTS: ShortcutConfig = {
+export const DEFAULT_SHORTCUTS: ShortcutConfig = {
   mic: 'ctrl+shift+d',
   delete: 'ctrl+shift+x',
   replace: 'ctrl+shift+r',

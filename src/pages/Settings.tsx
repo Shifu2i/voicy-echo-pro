@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react';
-import { Menu, LogOut, Mic } from 'lucide-react';
+import { useState, useEffect, useCallback } from 'react';
+import { Menu, LogOut, Mic, Keyboard, Trash2, RefreshCw, RotateCcw } from 'lucide-react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { SideMenu } from '@/components/SideMenu';
 import { BottomTabs } from '@/components/BottomTabs';
@@ -10,6 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
+import { ShortcutConfig, formatShortcut, parseKeyEvent, DEFAULT_SHORTCUTS } from '@/hooks/useKeyboardShortcuts';
 
 // Dyslexia-friendly background color options
 const DYSLEXIA_COLORS = [
@@ -55,6 +56,18 @@ const Settings = () => {
   const [selectedMic, setSelectedMic] = useState<string>('');
   
   const [isSaving, setIsSaving] = useState(false);
+  
+  // Keyboard shortcuts state
+  const [shortcuts, setShortcuts] = useState<ShortcutConfig>(() => {
+    try {
+      const saved = localStorage.getItem('widget-keyboard-shortcuts');
+      return saved ? JSON.parse(saved) : DEFAULT_SHORTCUTS;
+    } catch {
+      return DEFAULT_SHORTCUTS;
+    }
+  });
+  const [capturingKey, setCapturingKey] = useState<keyof ShortcutConfig | null>(null);
+  const [capturedKeys, setCapturedKeys] = useState('');
 
   const isValidHex = (hex: string) => /^#([A-Fa-f0-9]{6}|[A-Fa-f0-9]{3})$/.test(hex);
 
@@ -193,6 +206,57 @@ const Settings = () => {
     toast.success('Signed out successfully');
     navigate('/');
   };
+
+  // Keyboard shortcut handlers
+  const handleUpdateShortcut = useCallback((key: keyof ShortcutConfig, value: string) => {
+    setShortcuts(prev => {
+      const updated = { ...prev, [key]: value };
+      localStorage.setItem('keyboard-shortcuts', JSON.stringify(updated));
+      return updated;
+    });
+    toast.success('Shortcut updated!');
+  }, []);
+
+  const handleResetShortcuts = useCallback(() => {
+    setShortcuts(DEFAULT_SHORTCUTS);
+    localStorage.setItem('keyboard-shortcuts', JSON.stringify(DEFAULT_SHORTCUTS));
+    toast.success('Shortcuts reset to defaults');
+  }, []);
+
+  // Capture keyboard shortcut
+  useEffect(() => {
+    if (!capturingKey) return;
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      e.preventDefault();
+      const parsed = parseKeyEvent(e);
+      setCapturedKeys(parsed);
+      
+      if (e.ctrlKey || e.metaKey || e.altKey) {
+        const key = e.key.toLowerCase();
+        if (!['control', 'alt', 'shift', 'meta'].includes(key)) {
+          handleUpdateShortcut(capturingKey, parsed);
+          setCapturingKey(null);
+          setCapturedKeys('');
+        }
+      }
+    };
+
+    const handleKeyUp = () => {
+      setTimeout(() => {
+        if (capturingKey) {
+          setCapturedKeys('');
+        }
+      }, 100);
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('keyup', handleKeyUp);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('keyup', handleKeyUp);
+    };
+  }, [capturingKey, handleUpdateShortcut]);
 
   return (
     <div className="min-h-screen bg-background">
@@ -380,6 +444,86 @@ const Settings = () => {
           <div className="bg-muted rounded-2xl p-4">
             <label className="text-sm font-medium text-foreground">Voice Model</label>
             <p className="text-xs text-muted-foreground mt-1">VOSK + Whisper (Offline)</p>
+          </div>
+
+          {/* Keyboard Shortcuts */}
+          <div className="bg-muted rounded-2xl p-4">
+            <Label className="text-sm font-medium text-foreground flex items-center gap-2">
+              <Keyboard className="w-4 h-4" />
+              Keyboard Shortcuts
+            </Label>
+            <p className="text-xs text-muted-foreground mt-1 mb-3">
+              Configure shortcuts for the floating widget
+            </p>
+            
+            <div className="space-y-2">
+              {/* Mic Toggle */}
+              <div className="flex items-center justify-between py-2">
+                <div className="flex items-center gap-2">
+                  <Mic className="h-4 w-4 text-muted-foreground" />
+                  <span className="text-sm">Toggle Mic</span>
+                </div>
+                <Button
+                  variant={capturingKey === 'mic' ? 'secondary' : 'outline'}
+                  size="sm"
+                  className="min-w-[120px] text-xs font-mono"
+                  onClick={() => setCapturingKey(capturingKey === 'mic' ? null : 'mic')}
+                >
+                  {capturingKey === 'mic' 
+                    ? (capturedKeys ? formatShortcut(capturedKeys) : 'Press keys...')
+                    : formatShortcut(shortcuts.mic)
+                  }
+                </Button>
+              </div>
+
+              {/* Delete */}
+              <div className="flex items-center justify-between py-2">
+                <div className="flex items-center gap-2">
+                  <Trash2 className="h-4 w-4 text-muted-foreground" />
+                  <span className="text-sm">Delete</span>
+                </div>
+                <Button
+                  variant={capturingKey === 'delete' ? 'secondary' : 'outline'}
+                  size="sm"
+                  className="min-w-[120px] text-xs font-mono"
+                  onClick={() => setCapturingKey(capturingKey === 'delete' ? null : 'delete')}
+                >
+                  {capturingKey === 'delete' 
+                    ? (capturedKeys ? formatShortcut(capturedKeys) : 'Press keys...')
+                    : formatShortcut(shortcuts.delete)
+                  }
+                </Button>
+              </div>
+
+              {/* Replace */}
+              <div className="flex items-center justify-between py-2">
+                <div className="flex items-center gap-2">
+                  <RefreshCw className="h-4 w-4 text-muted-foreground" />
+                  <span className="text-sm">Replace</span>
+                </div>
+                <Button
+                  variant={capturingKey === 'replace' ? 'secondary' : 'outline'}
+                  size="sm"
+                  className="min-w-[120px] text-xs font-mono"
+                  onClick={() => setCapturingKey(capturingKey === 'replace' ? null : 'replace')}
+                >
+                  {capturingKey === 'replace' 
+                    ? (capturedKeys ? formatShortcut(capturedKeys) : 'Press keys...')
+                    : formatShortcut(shortcuts.replace)
+                  }
+                </Button>
+              </div>
+            </div>
+
+            <Button
+              variant="ghost"
+              size="sm"
+              className="w-full mt-3 text-xs text-muted-foreground"
+              onClick={handleResetShortcuts}
+            >
+              <RotateCcw className="h-3 w-3 mr-1" />
+              Reset to defaults
+            </Button>
           </div>
 
           {/* About */}
