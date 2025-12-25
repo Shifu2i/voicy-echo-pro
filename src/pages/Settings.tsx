@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Menu, LogOut, Mic, Keyboard, Trash2, RefreshCw, RotateCcw } from 'lucide-react';
+import { Menu, LogOut, Mic, Keyboard, Trash2, RefreshCw, RotateCcw, ExternalLink } from 'lucide-react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { SideMenu } from '@/components/SideMenu';
 import { BottomTabs } from '@/components/BottomTabs';
@@ -523,6 +523,25 @@ const Settings = () => {
             >
               <RotateCcw className="h-3 w-3 mr-1" />
               Reset to defaults
+            </Button>
+          </div>
+
+          {/* Floating Widget Mode */}
+          <div className="bg-muted rounded-2xl p-4">
+            <Label className="text-sm font-medium text-foreground flex items-center gap-2">
+              <ExternalLink className="w-4 h-4" />
+              Floating Widget Mode
+            </Label>
+            <p className="text-xs text-muted-foreground mt-1 mb-3">
+              Open a compact floating window for quick voice input
+            </p>
+            <Button
+              onClick={() => navigate('/widget')}
+              variant="outline"
+              className="w-full"
+            >
+              <ExternalLink className="w-4 h-4 mr-2" />
+              Open Floating Widget
             </Button>
           </div>
 
