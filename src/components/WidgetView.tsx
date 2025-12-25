@@ -5,6 +5,8 @@ import { toast } from 'sonner';
 import { ModelLoader } from './ModelLoader';
 import { VoskRecognizer, isModelLoaded, getSelectedMicrophoneId } from '@/services/voskRecognition';
 import { loadWhisperModel, transcribeAudio, isWhisperLoaded, checkWebGPUSupport } from '@/services/whisperRecognition';
+import { useKeyboardShortcuts, formatShortcut } from '@/hooks/useKeyboardShortcuts';
+import { ShortcutSettings } from './ShortcutSettings';
 
 // Type declarations for Electron API
 declare global {
@@ -187,18 +189,26 @@ export const WidgetView = () => {
     loadWhisperInBackground();
   }, [loadWhisperInBackground]);
 
-  const handleDelete = () => {
+  const handleDelete = useCallback(() => {
     setLastTranscription('');
     recordedTextRef.current = '';
     toast.success('Cleared');
-  };
+  }, []);
 
-  const handleReplace = () => {
+  const handleReplace = useCallback(() => {
     if (lastTranscription && window.electronAPI) {
       window.electronAPI.copyToClipboard(lastTranscription);
       toast.success('Copied - paste to replace');
     }
-  };
+  }, [lastTranscription]);
+
+  // Keyboard shortcuts
+  const { shortcuts, updateShortcut, resetShortcuts } = useKeyboardShortcuts(
+    toggleRecording,
+    handleDelete,
+    handleReplace,
+    isModelReady && !isPolishing
+  );
 
   // Listen for global hotkey events from main process
   useEffect(() => {
@@ -215,11 +225,11 @@ export const WidgetView = () => {
     };
   }, [toggleRecording, isRecording]);
 
-  // Compact floating mode - just 3 buttons
+  // Compact floating mode - just 3 buttons + settings
   if (!isExpanded && !isRecording && isModelReady) {
     return (
       <div 
-        className="h-screen w-screen overflow-hidden select-none bg-background/90 backdrop-blur-md rounded-full"
+        className="h-screen w-screen overflow-hidden select-none bg-background/90 backdrop-blur-md rounded-full relative"
         style={{ WebkitAppRegion: 'drag' } as React.CSSProperties}
       >
         <div 
@@ -232,7 +242,7 @@ export const WidgetView = () => {
             variant="ghost"
             size="icon"
             className="h-10 w-10 rounded-full hover:bg-primary hover:text-primary-foreground transition-colors"
-            title="Start dictation (Ctrl+Shift+D)"
+            title={`Start dictation (${formatShortcut(shortcuts.mic)})`}
           >
             <Mic className="h-5 w-5" />
           </Button>
@@ -243,7 +253,7 @@ export const WidgetView = () => {
             variant="ghost"
             size="icon"
             className="h-10 w-10 rounded-full hover:bg-destructive hover:text-destructive-foreground transition-colors"
-            title="Clear last transcription"
+            title={`Clear last transcription (${formatShortcut(shortcuts.delete)})`}
             disabled={!lastTranscription}
           >
             <Trash2 className="h-5 w-5" />
@@ -255,11 +265,18 @@ export const WidgetView = () => {
             variant="ghost"
             size="icon"
             className="h-10 w-10 rounded-full hover:bg-accent hover:text-accent-foreground transition-colors"
-            title="Copy to clipboard for replace"
+            title={`Copy to clipboard for replace (${formatShortcut(shortcuts.replace)})`}
             disabled={!lastTranscription}
           >
             <RefreshCw className="h-5 w-5" />
           </Button>
+
+          {/* Settings button */}
+          <ShortcutSettings
+            shortcuts={shortcuts}
+            onUpdateShortcut={updateShortcut}
+            onReset={resetShortcuts}
+          />
 
           {/* Expand button */}
           <Button
@@ -410,7 +427,7 @@ export const WidgetView = () => {
                 <span className="text-destructive">● Recording</span>
               )}
               {!isRecording && !isPolishing && isModelReady && (
-                <span>Ctrl+Shift+D to toggle</span>
+                <span>{formatShortcut(shortcuts.mic)} to toggle</span>
               )}
             </div>
           </>
