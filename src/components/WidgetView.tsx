@@ -1,13 +1,15 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
-import { Mic, Square, Loader2, X, Trash2, RefreshCw, Maximize2, Minimize2 } from 'lucide-react';
+import { Mic, Square, Loader2, X, Trash2, RefreshCw, Maximize2, Minimize2, ArrowLeft, Send, Clipboard, Keyboard } from 'lucide-react';
 import { toast } from 'sonner';
+import { Switch } from '@/components/ui/switch';
+import { Label } from '@/components/ui/label';
 import { ModelLoader } from './ModelLoader';
 import { VoskRecognizer, isModelLoaded, getSelectedMicrophoneId } from '@/services/voskRecognition';
 import { loadWhisperModel, transcribeAudio, isWhisperLoaded, checkWebGPUSupport } from '@/services/whisperRecognition';
 import { useKeyboardShortcuts, formatShortcut } from '@/hooks/useKeyboardShortcuts';
 import { ShortcutSettings } from './ShortcutSettings';
-
 // Type declarations for Electron API
 declare global {
   interface Window {
@@ -29,6 +31,9 @@ declare global {
 }
 
 export const WidgetView = () => {
+  const navigate = useNavigate();
+  const isElectron = !!window.electronAPI;
+  
   const [isRecording, setIsRecording] = useState(false);
   const [isModelReady, setIsModelReady] = useState(isModelLoaded());
   const [isPolishing, setIsPolishing] = useState(false);
@@ -37,6 +42,12 @@ export const WidgetView = () => {
   const [isExpanded, setIsExpanded] = useState(false);
   const [whisperStatus, setWhisperStatus] = useState<'idle' | 'loading' | 'ready' | 'unsupported'>('idle');
   
+  // Auto-type toggle state
+  const [autoTypeEnabled, setAutoTypeEnabled] = useState(() => {
+    const saved = localStorage.getItem('widget-auto-type');
+    return saved !== null ? saved === 'true' : true;
+  });
+  
   // Drag state
   const [position, setPosition] = useState(() => {
     const saved = localStorage.getItem('widget-position');
@@ -44,6 +55,11 @@ export const WidgetView = () => {
   });
   const [isDragging, setIsDragging] = useState(false);
   const dragStartRef = useRef({ x: 0, y: 0, posX: 0, posY: 0 });
+  
+  // Save auto-type preference
+  useEffect(() => {
+    localStorage.setItem('widget-auto-type', String(autoTypeEnabled));
+  }, [autoTypeEnabled]);
   
   const recognizerRef = useRef<VoskRecognizer | null>(null);
   const recordedTextRef = useRef<string>('');
@@ -95,14 +111,16 @@ export const WidgetView = () => {
       recordedTextRef.current += text + ' ';
       setLastTranscription(prev => prev + text + ' ');
       
-      // Type to active app in real-time
-      typeToActiveApp(text + ' ');
+      // Type to active app in real-time only if auto-type is enabled
+      if (autoTypeEnabled) {
+        typeToActiveApp(text + ' ');
+      }
       
       setPartialText('');
     } else {
       setPartialText(text);
     }
-  }, [typeToActiveApp]);
+  }, [typeToActiveApp, autoTypeEnabled]);
 
   const startRecording = async () => {
     if (!isModelReady) {
@@ -204,11 +222,49 @@ export const WidgetView = () => {
   }, []);
 
   const handleReplace = useCallback(() => {
-    if (lastTranscription && window.electronAPI) {
-      window.electronAPI.copyToClipboard(lastTranscription);
+    if (lastTranscription) {
+      if (window.electronAPI) {
+        window.electronAPI.copyToClipboard(lastTranscription);
+      } else {
+        navigator.clipboard.writeText(lastTranscription);
+      }
       toast.success('Copied - paste to replace');
     }
   }, [lastTranscription]);
+  
+  // Manual send to active app
+  const handleSendToApp = useCallback(async () => {
+    if (!lastTranscription.trim()) return;
+    
+    if (window.electronAPI) {
+      const result = await window.electronAPI.typeText(lastTranscription);
+      if (result.success) {
+        toast.success('Sent to active app');
+      } else {
+        toast.error('Failed to send: ' + result.error);
+      }
+    } else {
+      await navigator.clipboard.writeText(lastTranscription);
+      toast.success('Copied to clipboard - paste manually');
+    }
+  }, [lastTranscription]);
+  
+  // Copy to clipboard
+  const handleCopyToClipboard = useCallback(async () => {
+    if (!lastTranscription.trim()) return;
+    
+    if (window.electronAPI) {
+      window.electronAPI.copyToClipboard(lastTranscription);
+    } else {
+      await navigator.clipboard.writeText(lastTranscription);
+    }
+    toast.success('Copied to clipboard');
+  }, [lastTranscription]);
+  
+  // Navigate back
+  const handleBack = useCallback(() => {
+    navigate('/settings');
+  }, [navigate]);
 
   // Keyboard shortcuts
   const { shortcuts, updateShortcut, resetShortcuts } = useKeyboardShortcuts(
@@ -282,6 +338,17 @@ export const WidgetView = () => {
         onMouseDown={handleMouseDown}
       >
         <div className="flex items-center justify-center gap-2 px-3 py-2">
+          {/* Back button */}
+          <Button
+            onClick={(e) => { e.stopPropagation(); handleBack(); }}
+            variant="ghost"
+            size="icon"
+            className="h-8 w-8 rounded-full opacity-50 hover:opacity-100 transition-opacity"
+            title="Back to app"
+          >
+            <ArrowLeft className="h-4 w-4" />
+          </Button>
+
           {/* Mic button */}
           <Button
             onClick={(e) => { e.stopPropagation(); toggleRecording(); }}
@@ -305,17 +372,30 @@ export const WidgetView = () => {
             <Trash2 className="h-5 w-5" />
           </Button>
 
-          {/* Replace button */}
+          {/* Send to app / Copy button */}
           <Button
-            onClick={(e) => { e.stopPropagation(); handleReplace(); }}
+            onClick={(e) => { e.stopPropagation(); handleSendToApp(); }}
             variant="ghost"
             size="icon"
             className="h-10 w-10 rounded-full hover:bg-accent hover:text-accent-foreground transition-colors"
-            title={`Copy to clipboard for replace (${formatShortcut(shortcuts.replace)})`}
+            title={isElectron ? "Send to active app" : "Copy to clipboard"}
             disabled={!lastTranscription}
           >
-            <RefreshCw className="h-5 w-5" />
+            {isElectron ? <Send className="h-5 w-5" /> : <Clipboard className="h-5 w-5" />}
           </Button>
+
+          {/* Auto-type indicator (Electron only) */}
+          {isElectron && (
+            <Button
+              onClick={(e) => { e.stopPropagation(); setAutoTypeEnabled(!autoTypeEnabled); }}
+              variant="ghost"
+              size="icon"
+              className={`h-8 w-8 rounded-full transition-colors ${autoTypeEnabled ? 'text-primary bg-primary/10' : 'opacity-50'}`}
+              title={autoTypeEnabled ? "Auto-type ON (click to disable)" : "Auto-type OFF (click to enable)"}
+            >
+              <Keyboard className="h-4 w-4" />
+            </Button>
+          )}
 
           {/* Settings button */}
           <div onClick={(e) => e.stopPropagation()}>
@@ -361,6 +441,16 @@ export const WidgetView = () => {
           className="flex items-center gap-1"
           style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}
         >
+          {/* Back button */}
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-5 w-5 hover:bg-muted"
+            onClick={handleBack}
+            title="Back to app"
+          >
+            <ArrowLeft className="h-3 w-3" />
+          </Button>
           {isModelReady && !isRecording && (
             <Button
               variant="ghost"
@@ -376,7 +466,7 @@ export const WidgetView = () => {
             variant="ghost"
             size="icon"
             className="h-5 w-5 hover:bg-destructive/20 hover:text-destructive"
-            onClick={() => window.electronAPI?.closeWindow()}
+            onClick={isElectron ? () => window.electronAPI?.closeWindow() : handleBack}
           >
             <X className="h-3 w-3" />
           </Button>
@@ -432,6 +522,33 @@ export const WidgetView = () => {
                 </div>
               )}
 
+              {/* Auto-type toggle (Electron only) */}
+              {isElectron && !isRecording && (
+                <div className="flex items-center justify-between p-2 rounded-md bg-muted/20 mb-2">
+                  <div className="flex items-center gap-2">
+                    <Keyboard className="h-3 w-3 text-muted-foreground" />
+                    <Label htmlFor="auto-type" className="text-xs text-muted-foreground">
+                      Auto-type to active app
+                    </Label>
+                  </div>
+                  <Switch
+                    id="auto-type"
+                    checked={autoTypeEnabled}
+                    onCheckedChange={setAutoTypeEnabled}
+                    className="scale-75"
+                  />
+                </div>
+              )}
+
+              {/* Browser fallback notice */}
+              {!isElectron && !isRecording && (
+                <div className="p-2 rounded-md bg-amber-500/10 border border-amber-500/30 mb-2">
+                  <p className="text-[10px] text-amber-600 dark:text-amber-400">
+                    Running in browser mode. Install the desktop app to type directly into other applications.
+                  </p>
+                </div>
+              )}
+
               {/* Last transcription preview */}
               {lastTranscription && !isRecording && (
                 <div className="p-2 rounded-md bg-muted/30 border border-border/50">
@@ -442,19 +559,30 @@ export const WidgetView = () => {
                         variant="ghost"
                         size="icon"
                         className="h-5 w-5"
-                        onClick={handleDelete}
-                        title="Delete"
+                        onClick={handleCopyToClipboard}
+                        title="Copy to clipboard"
                       >
-                        <Trash2 className="h-3 w-3" />
+                        <Clipboard className="h-3 w-3" />
                       </Button>
+                      {isElectron && (
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-5 w-5"
+                          onClick={handleSendToApp}
+                          title="Send to active app"
+                        >
+                          <Send className="h-3 w-3" />
+                        </Button>
+                      )}
                       <Button
                         variant="ghost"
                         size="icon"
                         className="h-5 w-5"
-                        onClick={handleReplace}
-                        title="Copy to replace"
+                        onClick={handleDelete}
+                        title="Delete"
                       >
-                        <RefreshCw className="h-3 w-3" />
+                        <Trash2 className="h-3 w-3" />
                       </Button>
                     </div>
                   </div>
