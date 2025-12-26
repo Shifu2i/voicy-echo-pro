@@ -5,6 +5,7 @@ import { toast } from 'sonner';
 import { ModelLoader } from './ModelLoader';
 import { VoskRecognizer, isModelLoaded, getSelectedMicrophoneId } from '@/services/voskRecognition';
 import { loadWhisperModel, transcribeAudio, isWhisperLoaded, checkWebGPUSupport } from '@/services/whisperRecognition';
+import { processVoiceCommands } from '@/utils/voiceCommands';
 
 interface VoiceRecorderProps {
   onTranscription: (text: string) => void;
@@ -47,11 +48,12 @@ export const VoiceRecorder = ({ onTranscription }: VoiceRecorderProps) => {
 
   const handleResult = useCallback((text: string, isFinal: boolean) => {
     if (isFinal) {
-      recordedTextRef.current += text + ' ';
-      onTranscription(text + ' ');
+      const processed = processVoiceCommands(text);
+      recordedTextRef.current += processed + ' ';
+      onTranscription(processed + ' ');
       setPartialText('');
     } else {
-      setPartialText(text);
+      setPartialText(processVoiceCommands(text));
     }
   }, [onTranscription]);
 
@@ -139,13 +141,14 @@ export const VoiceRecorder = ({ onTranscription }: VoiceRecorderProps) => {
         const polishedText = await transcribeAudio(audioBlob);
         
         if (polishedText && polishedText.trim()) {
+          const processedPolished = processVoiceCommands(polishedText);
           // Replace the rough VOSK transcription with polished Whisper version
           const voskText = recordedTextRef.current.trim();
           if (voskText) {
             // Notify parent to replace with polished version
-            onTranscription(`\n[Polished]: ${polishedText}`);
+            onTranscription(`\n[Polished]: ${processedPolished}`);
           } else {
-            onTranscription(polishedText + ' ');
+            onTranscription(processedPolished + ' ');
           }
         }
       } catch (error) {

@@ -4,6 +4,7 @@ import { Mic, Square, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { VoskRecognizer, isModelLoaded, loadModel, getSelectedMicrophoneId } from '@/services/voskRecognition';
 import { loadWhisperModel, transcribeAudio, isWhisperLoaded, checkWebGPUSupport } from '@/services/whisperRecognition';
+import { processVoiceCommands } from '@/utils/voiceCommands';
 
 interface VoiceEditRecorderProps {
   mode: 'delete' | 'replace';
@@ -39,10 +40,11 @@ export const VoiceEditRecorder = ({ mode, selectedText, onEditComplete, fullText
 
   const handleResult = useCallback((text: string, isFinal: boolean) => {
     if (isFinal) {
-      recordedTextRef.current += text + ' ';
+      const processed = processVoiceCommands(text);
+      recordedTextRef.current += processed + ' ';
       setPartialText('');
     } else {
-      setPartialText(text);
+      setPartialText(processVoiceCommands(text));
     }
   }, []);
 
@@ -131,7 +133,7 @@ export const VoiceEditRecorder = ({ mode, selectedText, onEditComplete, fullText
           const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
           const polishedText = await transcribeAudio(audioBlob);
           if (polishedText && polishedText.trim()) {
-            transcribedText = polishedText.trim();
+            transcribedText = processVoiceCommands(polishedText.trim());
           }
         } catch (e) {
           console.error('Whisper polish failed:', e);
