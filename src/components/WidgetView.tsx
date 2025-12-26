@@ -37,6 +37,14 @@ export const WidgetView = () => {
   const [isExpanded, setIsExpanded] = useState(false);
   const [whisperStatus, setWhisperStatus] = useState<'idle' | 'loading' | 'ready' | 'unsupported'>('idle');
   
+  // Drag state
+  const [position, setPosition] = useState(() => {
+    const saved = localStorage.getItem('widget-position');
+    return saved ? JSON.parse(saved) : { x: 20, y: 20 };
+  });
+  const [isDragging, setIsDragging] = useState(false);
+  const dragStartRef = useRef({ x: 0, y: 0, posX: 0, posY: 0 });
+  
   const recognizerRef = useRef<VoskRecognizer | null>(null);
   const recordedTextRef = useRef<string>('');
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
@@ -225,20 +233,58 @@ export const WidgetView = () => {
     };
   }, [toggleRecording, isRecording]);
 
+  // Drag handlers
+  const handleMouseDown = useCallback((e: React.MouseEvent) => {
+    setIsDragging(true);
+    dragStartRef.current = {
+      x: e.clientX,
+      y: e.clientY,
+      posX: position.x,
+      posY: position.y
+    };
+  }, [position]);
+
+  useEffect(() => {
+    if (!isDragging) return;
+
+    const handleMouseMove = (e: MouseEvent) => {
+      const deltaX = e.clientX - dragStartRef.current.x;
+      const deltaY = e.clientY - dragStartRef.current.y;
+      const newX = Math.max(0, Math.min(window.innerWidth - 100, dragStartRef.current.posX + deltaX));
+      const newY = Math.max(0, Math.min(window.innerHeight - 50, dragStartRef.current.posY + deltaY));
+      setPosition({ x: newX, y: newY });
+    };
+
+    const handleMouseUp = () => {
+      setIsDragging(false);
+      localStorage.setItem('widget-position', JSON.stringify(position));
+    };
+
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mouseup', handleMouseUp);
+
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [isDragging, position]);
+
   // Compact floating mode - just 3 buttons + settings
   if (!isExpanded && !isRecording && isModelReady) {
     return (
       <div 
-        className="h-screen w-screen overflow-hidden select-none bg-background/90 backdrop-blur-md rounded-full relative"
-        style={{ WebkitAppRegion: 'drag' } as React.CSSProperties}
+        className={`fixed overflow-hidden select-none bg-background/90 backdrop-blur-md rounded-full shadow-lg border border-border/50 ${isDragging ? 'cursor-grabbing' : 'cursor-grab'}`}
+        style={{ 
+          left: position.x, 
+          top: position.y,
+          zIndex: 9999
+        }}
+        onMouseDown={handleMouseDown}
       >
-        <div 
-          className="h-full flex items-center justify-center gap-2 px-3"
-          style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}
-        >
+        <div className="flex items-center justify-center gap-2 px-3 py-2">
           {/* Mic button */}
           <Button
-            onClick={toggleRecording}
+            onClick={(e) => { e.stopPropagation(); toggleRecording(); }}
             variant="ghost"
             size="icon"
             className="h-10 w-10 rounded-full hover:bg-primary hover:text-primary-foreground transition-colors"
@@ -249,7 +295,7 @@ export const WidgetView = () => {
 
           {/* Delete button */}
           <Button
-            onClick={handleDelete}
+            onClick={(e) => { e.stopPropagation(); handleDelete(); }}
             variant="ghost"
             size="icon"
             className="h-10 w-10 rounded-full hover:bg-destructive hover:text-destructive-foreground transition-colors"
@@ -261,7 +307,7 @@ export const WidgetView = () => {
 
           {/* Replace button */}
           <Button
-            onClick={handleReplace}
+            onClick={(e) => { e.stopPropagation(); handleReplace(); }}
             variant="ghost"
             size="icon"
             className="h-10 w-10 rounded-full hover:bg-accent hover:text-accent-foreground transition-colors"
@@ -272,15 +318,17 @@ export const WidgetView = () => {
           </Button>
 
           {/* Settings button */}
-          <ShortcutSettings
-            shortcuts={shortcuts}
-            onUpdateShortcut={updateShortcut}
-            onReset={resetShortcuts}
-          />
+          <div onClick={(e) => e.stopPropagation()}>
+            <ShortcutSettings
+              shortcuts={shortcuts}
+              onUpdateShortcut={updateShortcut}
+              onReset={resetShortcuts}
+            />
+          </div>
 
           {/* Expand button */}
           <Button
-            onClick={() => setIsExpanded(true)}
+            onClick={(e) => { e.stopPropagation(); setIsExpanded(true); }}
             variant="ghost"
             size="icon"
             className="h-8 w-8 rounded-full opacity-50 hover:opacity-100 transition-opacity"
