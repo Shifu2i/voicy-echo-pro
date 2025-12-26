@@ -3,6 +3,7 @@ import { Menu, LogOut, Mic, Keyboard, Trash2, RefreshCw, RotateCcw, ExternalLink
 import { useLocation, useNavigate } from 'react-router-dom';
 import { SideMenu } from '@/components/SideMenu';
 import { BottomTabs } from '@/components/BottomTabs';
+import { MicTest } from '@/components/MicTest';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -421,18 +422,21 @@ const Settings = () => {
               Select your preferred microphone for voice recording
             </p>
             {audioDevices.length > 0 ? (
-              <Select value={selectedMic} onValueChange={handleMicChange}>
-                <SelectTrigger className="w-full bg-background">
-                  <SelectValue placeholder="Select a microphone" />
-                </SelectTrigger>
-                <SelectContent className="bg-background border border-border z-50">
-                  {audioDevices.map((device) => (
-                    <SelectItem key={device.deviceId} value={device.deviceId}>
-                      {device.label || `Microphone ${device.deviceId.slice(0, 8)}`}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <>
+                <Select value={selectedMic} onValueChange={handleMicChange}>
+                  <SelectTrigger className="w-full bg-background">
+                    <SelectValue placeholder="Select a microphone" />
+                  </SelectTrigger>
+                  <SelectContent className="bg-background border border-border z-50">
+                    {audioDevices.map((device) => (
+                      <SelectItem key={device.deviceId} value={device.deviceId}>
+                        {device.label || `Microphone ${device.deviceId.slice(0, 8)}`}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <MicTest deviceId={selectedMic} />
+              </>
             ) : (
               <p className="text-xs text-muted-foreground">
                 No microphones detected. Please allow microphone access.
