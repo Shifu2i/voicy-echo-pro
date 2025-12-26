@@ -76,11 +76,8 @@ export const transcribeAudio = async (audioBlob: Blob): Promise<string> => {
   
   await audioContext.close();
 
-  // Run transcription
-  const result = await transcriber(audioData, {
-    language: 'en',
-    task: 'transcribe',
-  }) as { text: string } | string;
+  // Run transcription - no language/task for English-only models
+  const result = await transcriber(audioData) as { text: string } | string;
 
   // Handle result - can be string or object with text property
   if (typeof result === 'string') {
