@@ -3,7 +3,7 @@ import { Button } from '@/components/ui/button';
 import { Mic, Square, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { VoskRecognizer, isModelLoaded, loadModel, getSelectedMicrophoneId } from '@/services/voskRecognition';
-import { loadWhisperModel, transcribeAudio, isWhisperLoaded, checkWebGPUSupport, WhisperProgressCallback } from '@/services/whisperRecognition';
+import { loadWhisperModel, transcribeAudio, isWhisperLoaded, WhisperProgressCallback, getActiveDevice } from '@/services/whisperRecognition';
 import { processVoiceCommands } from '@/utils/voiceCommands';
 import { Progress } from '@/components/ui/progress';
 
@@ -18,6 +18,7 @@ export const VoiceRecorder = ({ onTranscription }: VoiceRecorderProps) => {
   const [modelStatus, setModelStatus] = useState<'loading' | 'ready' | 'error'>('loading');
   const [loadProgress, setLoadProgress] = useState(0);
   const [voskReady, setVoskReady] = useState(isModelLoaded());
+  const [whisperDevice, setWhisperDevice] = useState<'webgpu' | 'wasm'>('webgpu');
   
   const recognizerRef = useRef<VoskRecognizer | null>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
@@ -27,24 +28,20 @@ export const VoiceRecorder = ({ onTranscription }: VoiceRecorderProps) => {
   useEffect(() => {
     const loadModels = async () => {
       try {
-        // Check WebGPU support for Whisper
-        const hasWebGPU = await checkWebGPUSupport();
-        if (!hasWebGPU) {
-          setModelStatus('error');
-          toast.error('WebGPU not supported - voice transcription unavailable');
-          return;
-        }
-
-        // Load Whisper as primary model
+        // Load Whisper with automatic WebGPU/CPU fallback
         if (!isWhisperLoaded()) {
           const progressCallback: WhisperProgressCallback = (progress) => {
             if (progress.progress !== undefined) {
               setLoadProgress(progress.progress);
             }
+            if (progress.device) {
+              setWhisperDevice(progress.device);
+            }
           };
           await loadWhisperModel(progressCallback);
         }
         
+        setWhisperDevice(getActiveDevice());
         setModelStatus('ready');
 
         // Load VOSK in background for real-time preview
@@ -172,7 +169,9 @@ export const VoiceRecorder = ({ onTranscription }: VoiceRecorderProps) => {
           <Loader2 className="h-5 w-5 text-primary animate-spin" />
           <div>
             <p className="text-sm font-medium">Loading Whisper AI...</p>
-            <p className="text-xs text-muted-foreground">One-time download for offline use</p>
+            <p className="text-xs text-muted-foreground">
+              {whisperDevice === 'wasm' ? 'Using CPU mode' : 'One-time download for offline use'}
+            </p>
           </div>
         </div>
         <Progress value={loadProgress} className="h-2" />
@@ -184,8 +183,8 @@ export const VoiceRecorder = ({ onTranscription }: VoiceRecorderProps) => {
   if (modelStatus === 'error') {
     return (
       <div className="p-4 rounded-xl bg-destructive/10 border border-destructive/20">
-        <p className="text-sm text-destructive">WebGPU required for voice transcription</p>
-        <p className="text-xs text-muted-foreground mt-1">Please use a browser with WebGPU support (Chrome 113+)</p>
+        <p className="text-sm text-destructive">Failed to load voice model</p>
+        <p className="text-xs text-muted-foreground mt-1">Please refresh the page and try again</p>
       </div>
     );
   }

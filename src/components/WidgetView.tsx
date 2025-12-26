@@ -7,7 +7,7 @@ import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import { Progress } from '@/components/ui/progress';
 import { VoskRecognizer, isModelLoaded, loadModel, getSelectedMicrophoneId } from '@/services/voskRecognition';
-import { loadWhisperModel, transcribeAudio, isWhisperLoaded, checkWebGPUSupport, WhisperProgressCallback } from '@/services/whisperRecognition';
+import { loadWhisperModel, transcribeAudio, isWhisperLoaded, WhisperProgressCallback, getActiveDevice } from '@/services/whisperRecognition';
 import { useKeyboardShortcuts, formatShortcut } from '@/hooks/useKeyboardShortcuts';
 import { ShortcutSettings } from './ShortcutSettings';
 import { processVoiceCommands } from '@/utils/voiceCommands';
@@ -46,6 +46,7 @@ export const WidgetView = () => {
   const [modelStatus, setModelStatus] = useState<'loading' | 'ready' | 'error'>('loading');
   const [loadProgress, setLoadProgress] = useState(0);
   const [voskReady, setVoskReady] = useState(isModelLoaded());
+  const [whisperDevice, setWhisperDevice] = useState<'webgpu' | 'wasm'>('webgpu');
   
   // Auto-type toggle state
   const [autoTypeEnabled, setAutoTypeEnabled] = useState(() => {
@@ -74,21 +75,19 @@ export const WidgetView = () => {
   useEffect(() => {
     const loadModels = async () => {
       try {
-        const hasWebGPU = await checkWebGPUSupport();
-        if (!hasWebGPU) {
-          setModelStatus('error');
-          return;
-        }
-
         if (!isWhisperLoaded()) {
           const progressCallback: WhisperProgressCallback = (progress) => {
             if (progress.progress !== undefined) {
               setLoadProgress(progress.progress);
             }
+            if (progress.device) {
+              setWhisperDevice(progress.device);
+            }
           };
           await loadWhisperModel(progressCallback);
         }
         
+        setWhisperDevice(getActiveDevice());
         setModelStatus('ready');
 
         // Load VOSK in background for preview
@@ -448,7 +447,9 @@ export const WidgetView = () => {
           <Mic className="h-3 w-3" />
           <span className="font-medium">Voice Widget</span>
           {modelStatus === 'ready' && (
-            <span className="text-[10px] text-primary">✨ Whisper</span>
+            <span className="text-[10px] text-primary">
+              ✨ Whisper {whisperDevice === 'wasm' ? '(CPU)' : '(GPU)'}
+            </span>
           )}
         </div>
         
@@ -495,7 +496,9 @@ export const WidgetView = () => {
             <Loader2 className="h-8 w-8 text-primary animate-spin" />
             <div className="text-center">
               <p className="text-sm font-medium">Loading Whisper AI...</p>
-              <p className="text-xs text-muted-foreground">One-time download</p>
+              <p className="text-xs text-muted-foreground">
+                {whisperDevice === 'wasm' ? 'Using CPU mode' : 'One-time download'}
+              </p>
             </div>
             <Progress value={loadProgress} className="w-32 h-2" />
             <p className="text-xs text-muted-foreground">{loadProgress}%</p>
@@ -503,8 +506,8 @@ export const WidgetView = () => {
         ) : modelStatus === 'error' ? (
           <div className="flex-1 flex items-center justify-center">
             <div className="p-4 rounded-xl bg-destructive/10 border border-destructive/20 text-center">
-              <p className="text-sm text-destructive">WebGPU required</p>
-              <p className="text-xs text-muted-foreground mt-1">Use Chrome 113+ for voice transcription</p>
+              <p className="text-sm text-destructive">Failed to load voice model</p>
+              <p className="text-xs text-muted-foreground mt-1">Please refresh and try again</p>
             </div>
           </div>
         ) : (
