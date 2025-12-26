@@ -5,11 +5,13 @@ import { Mic, Square, Loader2, X, Trash2, RefreshCw, Maximize2, Minimize2, Arrow
 import { toast } from 'sonner';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
-import { ModelLoader } from './ModelLoader';
-import { VoskRecognizer, isModelLoaded, getSelectedMicrophoneId } from '@/services/voskRecognition';
-import { loadWhisperModel, transcribeAudio, isWhisperLoaded, checkWebGPUSupport } from '@/services/whisperRecognition';
+import { Progress } from '@/components/ui/progress';
+import { VoskRecognizer, isModelLoaded, loadModel, getSelectedMicrophoneId } from '@/services/voskRecognition';
+import { loadWhisperModel, transcribeAudio, isWhisperLoaded, checkWebGPUSupport, WhisperProgressCallback } from '@/services/whisperRecognition';
 import { useKeyboardShortcuts, formatShortcut } from '@/hooks/useKeyboardShortcuts';
 import { ShortcutSettings } from './ShortcutSettings';
+import { processVoiceCommands } from '@/utils/voiceCommands';
+
 // Type declarations for Electron API
 declare global {
   interface Window {
@@ -35,12 +37,15 @@ export const WidgetView = () => {
   const isElectron = !!window.electronAPI;
   
   const [isRecording, setIsRecording] = useState(false);
-  const [isModelReady, setIsModelReady] = useState(isModelLoaded());
-  const [isPolishing, setIsPolishing] = useState(false);
+  const [isProcessing, setIsProcessing] = useState(false);
   const [partialText, setPartialText] = useState('');
   const [lastTranscription, setLastTranscription] = useState('');
   const [isExpanded, setIsExpanded] = useState(false);
-  const [whisperStatus, setWhisperStatus] = useState<'idle' | 'loading' | 'ready' | 'unsupported'>('idle');
+  
+  // Model status
+  const [modelStatus, setModelStatus] = useState<'loading' | 'ready' | 'error'>('loading');
+  const [loadProgress, setLoadProgress] = useState(0);
+  const [voskReady, setVoskReady] = useState(isModelLoaded());
   
   // Auto-type toggle state
   const [autoTypeEnabled, setAutoTypeEnabled] = useState(() => {
@@ -62,31 +67,49 @@ export const WidgetView = () => {
   }, [autoTypeEnabled]);
   
   const recognizerRef = useRef<VoskRecognizer | null>(null);
-  const recordedTextRef = useRef<string>('');
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
 
-  // Load Whisper model in background
-  const loadWhisperInBackground = useCallback(async () => {
-    if (isWhisperLoaded()) {
-      setWhisperStatus('ready');
-      return;
-    }
+  // Load Whisper (primary) and VOSK (preview)
+  useEffect(() => {
+    const loadModels = async () => {
+      try {
+        const hasWebGPU = await checkWebGPUSupport();
+        if (!hasWebGPU) {
+          setModelStatus('error');
+          return;
+        }
 
-    const hasWebGPU = await checkWebGPUSupport();
-    if (!hasWebGPU) {
-      setWhisperStatus('unsupported');
-      return;
-    }
+        if (!isWhisperLoaded()) {
+          const progressCallback: WhisperProgressCallback = (progress) => {
+            if (progress.progress !== undefined) {
+              setLoadProgress(progress.progress);
+            }
+          };
+          await loadWhisperModel(progressCallback);
+        }
+        
+        setModelStatus('ready');
 
-    setWhisperStatus('loading');
-    try {
-      await loadWhisperModel();
-      setWhisperStatus('ready');
-    } catch (error) {
-      console.error('Failed to load Whisper:', error);
-      setWhisperStatus('unsupported');
-    }
+        // Load VOSK in background for preview
+        if (!isModelLoaded()) {
+          loadModel().then(() => setVoskReady(true)).catch(console.error);
+        } else {
+          setVoskReady(true);
+        }
+      } catch (error) {
+        console.error('Failed to load Whisper:', error);
+        setModelStatus('error');
+      }
+    };
+
+    loadModels();
+  }, []);
+
+  // VOSK callback for preview only
+  const handleVoskResult = useCallback((text: string, isFinal: boolean) => {
+    const processed = processVoiceCommands(text);
+    setPartialText(processed);
   }, []);
 
   // Type text to active application
@@ -106,37 +129,19 @@ export const WidgetView = () => {
     }
   }, []);
 
-  const handleResult = useCallback((text: string, isFinal: boolean) => {
-    if (isFinal && text.trim()) {
-      recordedTextRef.current += text + ' ';
-      setLastTranscription(prev => prev + text + ' ');
-      
-      // Type to active app in real-time only if auto-type is enabled
-      if (autoTypeEnabled) {
-        typeToActiveApp(text + ' ');
-      }
-      
-      setPartialText('');
-    } else {
-      setPartialText(text);
-    }
-  }, [typeToActiveApp, autoTypeEnabled]);
 
   const startRecording = async () => {
-    if (!isModelReady) {
+    if (modelStatus !== 'ready') {
       toast.error('Voice model is still loading');
       return;
     }
 
     try {
-      recordedTextRef.current = '';
       audioChunksRef.current = [];
       setLastTranscription('');
+      setPartialText('');
 
       const deviceId = getSelectedMicrophoneId();
-      recognizerRef.current = new VoskRecognizer(handleResult, deviceId);
-      await recognizerRef.current.start();
-
       const audioConstraints: MediaTrackConstraints = {
         echoCancellation: true,
         noiseSuppression: true
@@ -145,10 +150,14 @@ export const WidgetView = () => {
         audioConstraints.deviceId = { exact: deviceId };
       }
 
-      const stream = await navigator.mediaDevices.getUserMedia({
-        audio: audioConstraints
-      });
+      // Start VOSK for real-time preview if available
+      if (voskReady) {
+        recognizerRef.current = new VoskRecognizer(handleVoskResult, deviceId);
+        await recognizerRef.current.start();
+      }
 
+      // Start MediaRecorder for Whisper
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: audioConstraints });
       const mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm' });
       mediaRecorderRef.current = mediaRecorder;
 
@@ -172,33 +181,45 @@ export const WidgetView = () => {
 
   const stopRecording = async () => {
     setIsRecording(false);
+    setIsProcessing(true);
     setPartialText('');
 
+    // Stop VOSK preview
     if (recognizerRef.current) {
       recognizerRef.current.stop();
       recognizerRef.current = null;
     }
 
+    // Stop MediaRecorder
     if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
       mediaRecorderRef.current.stop();
       mediaRecorderRef.current.stream.getTracks().forEach(track => track.stop());
     }
 
-    // Polish with Whisper if available
-    if (whisperStatus === 'ready' && audioChunksRef.current.length > 0) {
-      setIsPolishing(true);
-      try {
+    try {
+      if (audioChunksRef.current.length > 0) {
         const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
-        const polishedText = await transcribeAudio(audioBlob);
+        const transcription = await transcribeAudio(audioBlob);
         
-        if (polishedText && polishedText.trim()) {
-          setLastTranscription(polishedText);
+        if (transcription && transcription.trim()) {
+          const processed = processVoiceCommands(transcription.trim());
+          setLastTranscription(processed);
+          
+          // Auto-type if enabled
+          if (autoTypeEnabled) {
+            typeToActiveApp(processed);
+          }
+        } else {
+          toast.error('No speech detected');
         }
-      } catch (error) {
-        console.error('Whisper polish failed:', error);
-      } finally {
-        setIsPolishing(false);
+      } else {
+        toast.error('No audio recorded');
       }
+    } catch (error) {
+      console.error('Whisper transcription failed:', error);
+      toast.error('Transcription failed');
+    } finally {
+      setIsProcessing(false);
     }
   };
 
@@ -210,14 +231,8 @@ export const WidgetView = () => {
     }
   }, [isRecording]);
 
-  const handleModelReady = useCallback(() => {
-    setIsModelReady(true);
-    loadWhisperInBackground();
-  }, [loadWhisperInBackground]);
-
   const handleDelete = useCallback(() => {
     setLastTranscription('');
-    recordedTextRef.current = '';
     toast.success('Cleared');
   }, []);
 
@@ -271,7 +286,7 @@ export const WidgetView = () => {
     toggleRecording,
     handleDelete,
     handleReplace,
-    isModelReady && !isPolishing
+    modelStatus === 'ready' && !isProcessing
   );
 
   // Listen for global hotkey events from main process
@@ -326,7 +341,7 @@ export const WidgetView = () => {
   }, [isDragging, position]);
 
   // Compact floating mode - just 3 buttons + settings
-  if (!isExpanded && !isRecording && isModelReady) {
+  if (!isExpanded && !isRecording && modelStatus === 'ready') {
     return (
       <div 
         className={`fixed overflow-hidden select-none bg-background/90 backdrop-blur-md rounded-full shadow-lg border border-border/50 ${isDragging ? 'cursor-grabbing' : 'cursor-grab'}`}
@@ -432,8 +447,8 @@ export const WidgetView = () => {
         <div className="flex items-center gap-1 text-xs text-muted-foreground">
           <Mic className="h-3 w-3" />
           <span className="font-medium">Voice Widget</span>
-          {whisperStatus === 'ready' && (
-            <span className="text-[10px] text-primary">✨</span>
+          {modelStatus === 'ready' && (
+            <span className="text-[10px] text-primary">✨ Whisper</span>
           )}
         </div>
         
@@ -451,7 +466,7 @@ export const WidgetView = () => {
           >
             <ArrowLeft className="h-3 w-3" />
           </Button>
-          {isModelReady && !isRecording && (
+          {modelStatus === 'ready' && !isRecording && (
             <Button
               variant="ghost"
               size="icon"
@@ -475,9 +490,22 @@ export const WidgetView = () => {
 
       {/* Main content */}
       <div className="flex flex-col h-[calc(100%-2rem)] p-3 gap-2 bg-background/95 backdrop-blur-md">
-        {!isModelReady ? (
+        {modelStatus === 'loading' ? (
+          <div className="flex-1 flex flex-col items-center justify-center gap-3">
+            <Loader2 className="h-8 w-8 text-primary animate-spin" />
+            <div className="text-center">
+              <p className="text-sm font-medium">Loading Whisper AI...</p>
+              <p className="text-xs text-muted-foreground">One-time download</p>
+            </div>
+            <Progress value={loadProgress} className="w-32 h-2" />
+            <p className="text-xs text-muted-foreground">{loadProgress}%</p>
+          </div>
+        ) : modelStatus === 'error' ? (
           <div className="flex-1 flex items-center justify-center">
-            <ModelLoader onModelReady={handleModelReady} />
+            <div className="p-4 rounded-xl bg-destructive/10 border border-destructive/20 text-center">
+              <p className="text-sm text-destructive">WebGPU required</p>
+              <p className="text-xs text-muted-foreground mt-1">Use Chrome 113+ for voice transcription</p>
+            </div>
           </div>
         ) : (
           <>
@@ -485,7 +513,7 @@ export const WidgetView = () => {
             <div className="flex justify-center">
               <Button
                 onClick={toggleRecording}
-                disabled={!isModelReady || isPolishing}
+                disabled={isProcessing}
                 variant={isRecording ? 'destructive' : 'default'}
                 size="lg"
                 className={`
@@ -494,10 +522,10 @@ export const WidgetView = () => {
                   ${isRecording ? 'animate-pulse shadow-lg shadow-destructive/30' : 'shadow-md'}
                 `}
               >
-                {isPolishing ? (
+                {isProcessing ? (
                   <>
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Polishing
+                    Transcribing
                   </>
                 ) : isRecording ? (
                   <>
@@ -515,10 +543,11 @@ export const WidgetView = () => {
 
             {/* Status and transcription preview */}
             <div className="flex-1 overflow-hidden">
-              {/* Partial/live text */}
+              {/* Partial/live text from VOSK */}
               {partialText && (
-                <div className="p-2 rounded-md bg-muted/50 text-xs text-muted-foreground italic mb-2 truncate">
-                  {partialText}...
+                <div className="p-2 rounded-md bg-muted/50 text-xs mb-2">
+                  <span className="text-muted-foreground text-[10px]">Preview: </span>
+                  <span className="italic">{partialText}...</span>
                 </div>
               )}
 
@@ -593,16 +622,16 @@ export const WidgetView = () => {
 
             {/* Footer status */}
             <div className="flex items-center justify-center gap-2 text-[10px] text-muted-foreground">
-              {whisperStatus === 'loading' && (
+              {!voskReady && (
                 <>
                   <Loader2 className="h-2 w-2 animate-spin" />
-                  <span>Loading AI...</span>
+                  <span>Loading preview...</span>
                 </>
               )}
               {isRecording && (
                 <span className="text-destructive">● Recording</span>
               )}
-              {!isRecording && !isPolishing && isModelReady && (
+              {!isRecording && !isProcessing && modelStatus === 'ready' && (
                 <span>{formatShortcut(shortcuts.mic)} to toggle</span>
               )}
             </div>

@@ -5,6 +5,7 @@ import { toast } from 'sonner';
 import { VoskRecognizer, isModelLoaded, loadModel, getSelectedMicrophoneId } from '@/services/voskRecognition';
 import { loadWhisperModel, transcribeAudio, isWhisperLoaded, checkWebGPUSupport } from '@/services/whisperRecognition';
 import { processVoiceCommands } from '@/utils/voiceCommands';
+import { Progress } from '@/components/ui/progress';
 
 interface VoiceEditRecorderProps {
   mode: 'delete' | 'replace';
@@ -15,57 +16,66 @@ interface VoiceEditRecorderProps {
 
 export const VoiceEditRecorder = ({ mode, selectedText, onEditComplete, fullText }: VoiceEditRecorderProps) => {
   const [isRecording, setIsRecording] = useState(false);
-  const [isModelReady, setIsModelReady] = useState(isModelLoaded());
   const [isProcessing, setIsProcessing] = useState(false);
   const [partialText, setPartialText] = useState('');
+  const [modelStatus, setModelStatus] = useState<'loading' | 'ready' | 'error'>('loading');
+  const [loadProgress, setLoadProgress] = useState(0);
+  const [voskReady, setVoskReady] = useState(isModelLoaded());
+  
   const recognizerRef = useRef<VoskRecognizer | null>(null);
-  const recordedTextRef = useRef<string>('');
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
 
-  // Load model on mount if not ready
+  // Load Whisper (primary) and VOSK (preview) on mount
   useEffect(() => {
-    if (!isModelReady) {
-      loadModel().then(() => {
-        setIsModelReady(true);
-        // Try loading Whisper in background
-        checkWebGPUSupport().then(hasWebGPU => {
-          if (hasWebGPU && !isWhisperLoaded()) {
-            loadWhisperModel().catch(console.error);
-          }
-        });
-      }).catch(console.error);
-    }
-  }, [isModelReady]);
+    const loadModels = async () => {
+      try {
+        const hasWebGPU = await checkWebGPUSupport();
+        if (!hasWebGPU) {
+          setModelStatus('error');
+          return;
+        }
 
-  const handleResult = useCallback((text: string, isFinal: boolean) => {
-    if (isFinal) {
-      const processed = processVoiceCommands(text);
-      recordedTextRef.current += processed + ' ';
-      setPartialText('');
-    } else {
-      setPartialText(processVoiceCommands(text));
-    }
+        if (!isWhisperLoaded()) {
+          await loadWhisperModel((progress) => {
+            if (progress.progress !== undefined) {
+              setLoadProgress(progress.progress);
+            }
+          });
+        }
+        
+        setModelStatus('ready');
+
+        // Load VOSK in background for preview
+        if (!isModelLoaded()) {
+          loadModel().then(() => setVoskReady(true)).catch(console.error);
+        } else {
+          setVoskReady(true);
+        }
+      } catch (error) {
+        console.error('Failed to load Whisper:', error);
+        setModelStatus('error');
+      }
+    };
+
+    loadModels();
+  }, []);
+
+  const handleVoskResult = useCallback((text: string, isFinal: boolean) => {
+    setPartialText(processVoiceCommands(text));
   }, []);
 
   const startRecording = async () => {
-    if (!isModelReady) {
-      toast.error('Voice model is still loading. Please wait.');
+    if (modelStatus !== 'ready') {
+      toast.error('Voice model is still loading');
       return;
     }
 
     try {
-      recordedTextRef.current = '';
       audioChunksRef.current = [];
+      setPartialText('');
 
-      // Get selected microphone
       const deviceId = getSelectedMicrophoneId();
-
-      // Start VOSK recognizer with selected mic
-      recognizerRef.current = new VoskRecognizer(handleResult, deviceId);
-      await recognizerRef.current.start();
-
-      // Build audio constraints with selected device
       const audioConstraints: MediaTrackConstraints = {
         echoCancellation: true,
         noiseSuppression: true
@@ -74,10 +84,12 @@ export const VoiceEditRecorder = ({ mode, selectedText, onEditComplete, fullText
         audioConstraints.deviceId = { exact: deviceId };
       }
 
-      const stream = await navigator.mediaDevices.getUserMedia({
-        audio: audioConstraints
-      });
+      if (voskReady) {
+        recognizerRef.current = new VoskRecognizer(handleVoskResult, deviceId);
+        await recognizerRef.current.start();
+      }
 
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: audioConstraints });
       const mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm' });
       mediaRecorderRef.current = mediaRecorder;
 
@@ -89,18 +101,11 @@ export const VoiceEditRecorder = ({ mode, selectedText, onEditComplete, fullText
 
       mediaRecorder.start(1000);
       setIsRecording(true);
-      
-      if (mode === 'delete') {
-        toast.info('Speak the text you want to delete');
-      } else {
-        toast.info('Speak the replacement text');
-      }
+      toast.info(mode === 'delete' ? 'Speak the text you want to delete' : 'Speak the replacement text');
     } catch (error: any) {
       console.error('Error starting recording:', error);
       if (error.name === 'NotAllowedError') {
         toast.error('Microphone access denied');
-      } else if (error.name === 'OverconstrainedError') {
-        toast.error('Selected microphone not available');
       } else {
         toast.error('Could not start recording');
       }
@@ -109,45 +114,38 @@ export const VoiceEditRecorder = ({ mode, selectedText, onEditComplete, fullText
 
   const stopRecording = async () => {
     setIsRecording(false);
-    setPartialText('');
     setIsProcessing(true);
+    setPartialText('');
 
-    // Stop VOSK
     if (recognizerRef.current) {
       recognizerRef.current.stop();
       recognizerRef.current = null;
     }
 
-    // Stop MediaRecorder
     if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
       mediaRecorderRef.current.stop();
       mediaRecorderRef.current.stream.getTracks().forEach(track => track.stop());
     }
 
     try {
-      let transcribedText = recordedTextRef.current.trim();
-
-      // Try Whisper polish if available
-      if (isWhisperLoaded() && audioChunksRef.current.length > 0) {
-        try {
-          const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
-          const polishedText = await transcribeAudio(audioBlob);
-          if (polishedText && polishedText.trim()) {
-            transcribedText = processVoiceCommands(polishedText.trim());
-          }
-        } catch (e) {
-          console.error('Whisper polish failed:', e);
-        }
+      if (audioChunksRef.current.length === 0) {
+        toast.error('No audio recorded');
+        setIsProcessing(false);
+        return;
       }
 
-      if (!transcribedText) {
+      const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
+      const transcription = await transcribeAudio(audioBlob);
+      
+      if (!transcription || !transcription.trim()) {
         toast.error('No speech detected');
         setIsProcessing(false);
         return;
       }
 
+      const transcribedText = processVoiceCommands(transcription.trim());
+
       if (mode === 'delete') {
-        // Find and remove the spoken text from the document
         const lowerFullText = fullText.toLowerCase();
         const lowerTranscribed = transcribedText.toLowerCase();
         const index = lowerFullText.indexOf(lowerTranscribed);
@@ -160,7 +158,6 @@ export const VoiceEditRecorder = ({ mode, selectedText, onEditComplete, fullText
           toast.error(`Could not find "${transcribedText}" in the document`);
         }
       } else {
-        // Replace mode: replace selected text with transcription
         if (!selectedText) {
           toast.error('Please select text to replace first');
           setIsProcessing(false);
@@ -172,25 +169,45 @@ export const VoiceEditRecorder = ({ mode, selectedText, onEditComplete, fullText
         toast.success('Text replaced');
       }
     } catch (error) {
-      console.error('Processing error:', error);
-      toast.error('Failed to process speech');
+      console.error('Transcription failed:', error);
+      toast.error('Transcription failed');
     } finally {
       setIsProcessing(false);
     }
   };
 
+  if (modelStatus === 'loading') {
+    return (
+      <div className="p-3 rounded-lg bg-card border border-border">
+        <div className="flex items-center gap-2 mb-2">
+          <Loader2 className="h-4 w-4 text-primary animate-spin" />
+          <span className="text-sm">Loading Whisper AI...</span>
+        </div>
+        <Progress value={loadProgress} className="h-1.5" />
+      </div>
+    );
+  }
+
+  if (modelStatus === 'error') {
+    return (
+      <div className="p-3 rounded-lg bg-destructive/10 border border-destructive/20">
+        <p className="text-sm text-destructive">WebGPU required</p>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-3">
       <Button
         onClick={isRecording ? stopRecording : startRecording}
-        disabled={!isModelReady || isProcessing}
+        disabled={isProcessing}
         variant={isRecording ? 'destructive' : mode === 'delete' ? 'secondary' : 'default'}
         className={`w-full py-6 text-base rounded-full ${isRecording ? 'recording-pulse glow-recording' : ''}`}
       >
         {isProcessing ? (
           <>
             <Loader2 className="mr-2 h-5 w-5 animate-spin" />
-            Processing...
+            Transcribing...
           </>
         ) : isRecording ? (
           <>
@@ -200,14 +217,15 @@ export const VoiceEditRecorder = ({ mode, selectedText, onEditComplete, fullText
         ) : (
           <>
             <Mic className="mr-2 h-5 w-5" />
-            {!isModelReady ? 'Loading...' : mode === 'delete' ? 'DELETE' : 'REPLACE'}
+            {mode === 'delete' ? 'DELETE' : 'REPLACE'}
           </>
         )}
       </Button>
 
       {partialText && (
         <div className="p-3 rounded-lg bg-muted/50 border border-border">
-          <p className="text-sm text-muted-foreground italic">{partialText}...</p>
+          <p className="text-xs text-muted-foreground mb-1">Preview:</p>
+          <p className="text-sm italic">{partialText}...</p>
         </div>
       )}
     </div>
