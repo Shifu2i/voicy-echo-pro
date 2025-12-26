@@ -3,7 +3,7 @@ import { Button } from '@/components/ui/button';
 import { Mic, Square, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { VoskRecognizer, isModelLoaded, loadModel, getSelectedMicrophoneId } from '@/services/voskRecognition';
-import { loadWhisperModel, transcribeAudio, isWhisperLoaded, checkWebGPUSupport } from '@/services/whisperRecognition';
+import { loadWhisperModel, transcribeAudio, isWhisperLoaded, getActiveDevice } from '@/services/whisperRecognition';
 import { processVoiceCommands } from '@/utils/voiceCommands';
 import { Progress } from '@/components/ui/progress';
 
@@ -30,12 +30,6 @@ export const VoiceEditRecorder = ({ mode, selectedText, onEditComplete, fullText
   useEffect(() => {
     const loadModels = async () => {
       try {
-        const hasWebGPU = await checkWebGPUSupport();
-        if (!hasWebGPU) {
-          setModelStatus('error');
-          return;
-        }
-
         if (!isWhisperLoaded()) {
           await loadWhisperModel((progress) => {
             if (progress.progress !== undefined) {
@@ -191,7 +185,7 @@ export const VoiceEditRecorder = ({ mode, selectedText, onEditComplete, fullText
   if (modelStatus === 'error') {
     return (
       <div className="p-3 rounded-lg bg-destructive/10 border border-destructive/20">
-        <p className="text-sm text-destructive">WebGPU required</p>
+        <p className="text-sm text-destructive">Failed to load model</p>
       </div>
     );
   }
