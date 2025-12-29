@@ -212,7 +212,7 @@ const Settings = () => {
   const handleUpdateShortcut = useCallback((key: keyof ShortcutConfig, value: string) => {
     setShortcuts(prev => {
       const updated = { ...prev, [key]: value };
-      localStorage.setItem('keyboard-shortcuts', JSON.stringify(updated));
+      localStorage.setItem('widget-keyboard-shortcuts', JSON.stringify(updated));
       return updated;
     });
     toast.success('Shortcut updated!');
@@ -220,7 +220,7 @@ const Settings = () => {
 
   const handleResetShortcuts = useCallback(() => {
     setShortcuts(DEFAULT_SHORTCUTS);
-    localStorage.setItem('keyboard-shortcuts', JSON.stringify(DEFAULT_SHORTCUTS));
+    localStorage.setItem('widget-keyboard-shortcuts', JSON.stringify(DEFAULT_SHORTCUTS));
     toast.success('Shortcuts reset to defaults');
   }, []);
 
