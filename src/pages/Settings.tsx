@@ -1,8 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Menu, LogOut, Mic, Keyboard, Trash2, RefreshCw, RotateCcw, ExternalLink } from 'lucide-react';
+import { Menu, LogOut, Mic, Keyboard, Trash2, RefreshCw, RotateCcw } from 'lucide-react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { SideMenu } from '@/components/SideMenu';
-import { BottomTabs } from '@/components/BottomTabs';
 import { MicTest } from '@/components/MicTest';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
@@ -260,26 +259,21 @@ const Settings = () => {
   }, [capturingKey, handleUpdateShortcut]);
 
   return (
-    <div className="min-h-screen bg-background">
-      <div className="max-w-md mx-auto px-4 py-6 space-y-6">
-        {/* Header */}
-        <div className="flex items-center justify-between py-2">
-          <div className="flex-1" />
-          <div className="bg-muted px-6 py-2 rounded-full">
-            <span className="text-sm font-medium text-foreground">SETTINGS</span>
-          </div>
-          <div className="flex-1 flex justify-end">
+    <div className="min-h-screen bg-background p-4">
+      <div className="max-w-md mx-auto">
+        {/* Card Container */}
+        <div className="bg-card rounded-3xl p-5 space-y-4">
+          {/* Header */}
+          <div className="flex items-center justify-between mb-2">
+            <h1 className="text-xl font-semibold text-foreground tracking-wide">Settings</h1>
             <button 
               onClick={() => setIsMenuOpen(true)}
-              className="p-2"
+              className="p-2 hover:bg-muted rounded-lg transition-colors"
             >
-              <Menu className="w-6 h-6 text-foreground" />
+              <Menu className="w-5 h-5 text-muted-foreground" />
             </button>
           </div>
-        </div>
 
-        {/* Settings Content */}
-        <div className="space-y-4">
           {/* Account Info */}
           <div className="bg-muted rounded-2xl p-4">
             <label className="text-sm font-medium text-foreground">Account</label>
@@ -305,7 +299,7 @@ const Settings = () => {
                     disabled={isSaving}
                     className={`w-full aspect-square rounded-xl border-2 transition-all ${
                       backgroundColor === color.value
-                        ? 'border-primary ring-2 ring-primary ring-offset-2'
+                        ? 'border-primary ring-2 ring-primary ring-offset-2 ring-offset-card'
                         : 'border-transparent hover:border-muted-foreground/30'
                     }`}
                     style={{ backgroundColor: color.value }}
@@ -332,7 +326,7 @@ const Settings = () => {
                     placeholder="#FF5733"
                     value={customBgHex}
                     onChange={(e) => handleBgHexInputChange(e.target.value)}
-                    className="flex-1 font-mono uppercase"
+                    className="flex-1 font-mono uppercase bg-input"
                     maxLength={7}
                   />
                   <Button
@@ -367,7 +361,7 @@ const Settings = () => {
                     disabled={isSaving}
                     className={`w-full aspect-square rounded-xl border-2 transition-all ${
                       writingColor === color.value
-                        ? 'border-primary ring-2 ring-primary ring-offset-2'
+                        ? 'border-primary ring-2 ring-primary ring-offset-2 ring-offset-card'
                         : 'border-transparent hover:border-muted-foreground/30'
                     }`}
                     style={{ backgroundColor: color.value }}
@@ -394,7 +388,7 @@ const Settings = () => {
                     placeholder="#333333"
                     value={customTextHex}
                     onChange={(e) => handleTextHexInputChange(e.target.value)}
-                    className="flex-1 font-mono uppercase"
+                    className="flex-1 font-mono uppercase bg-input"
                     maxLength={7}
                   />
                   <Button
@@ -424,10 +418,10 @@ const Settings = () => {
             {audioDevices.length > 0 ? (
               <>
                 <Select value={selectedMic} onValueChange={handleMicChange}>
-                  <SelectTrigger className="w-full bg-background">
+                  <SelectTrigger className="w-full bg-input">
                     <SelectValue placeholder="Select a microphone" />
                   </SelectTrigger>
-                  <SelectContent className="bg-background border border-border z-50">
+                  <SelectContent className="bg-popover border border-border z-50">
                     {audioDevices.map((device) => (
                       <SelectItem key={device.deviceId} value={device.deviceId}>
                         {device.label || `Microphone ${device.deviceId.slice(0, 8)}`}
@@ -530,37 +524,20 @@ const Settings = () => {
             </Button>
           </div>
 
-          {/* Floating Widget Mode */}
-          <div className="bg-muted rounded-2xl p-4">
-            <Label className="text-sm font-medium text-foreground flex items-center gap-2">
-              <ExternalLink className="w-4 h-4" />
-              Floating Widget Mode
-            </Label>
-            <p className="text-xs text-muted-foreground mt-1 mb-3">
-              Open a compact floating window for quick voice input
-            </p>
-            <Button
-              onClick={() => navigate('/widget')}
-              variant="outline"
-              className="w-full"
-            >
-              <ExternalLink className="w-4 h-4 mr-2" />
-              Open Floating Widget
-            </Button>
-          </div>
+          {/* More Button */}
+          <button
+            onClick={() => navigate('/widget')}
+            className="w-full bg-muted text-foreground py-3.5 rounded-full text-sm font-medium hover:bg-accent transition-colors"
+          >
+            More
+          </button>
 
-          {/* About */}
-          <div className="bg-muted rounded-2xl p-4">
-            <label className="text-sm font-medium text-foreground">About</label>
-            <p className="text-xs text-muted-foreground mt-1">ORATOR v1.0 - Voice-first text editing</p>
-          </div>
-
-          {/* Sign Out / Sign In */}
+          {/* Sign Out / Sign In - Save Button Style */}
           {user ? (
             <Button
               onClick={handleSignOut}
               variant="outline"
-              className="w-full rounded-2xl py-6"
+              className="w-full rounded-full py-6 bg-muted hover:bg-accent"
             >
               <LogOut className="w-4 h-4 mr-2" />
               Sign Out
@@ -568,18 +545,13 @@ const Settings = () => {
           ) : (
             <Button
               onClick={() => navigate('/signin')}
-              className="w-full rounded-2xl bg-primary text-primary-foreground py-6"
+              className="w-full rounded-full bg-primary text-primary-foreground py-6 hover:bg-primary/90"
             >
               Sign In
             </Button>
           )}
         </div>
-
-        {/* Bottom padding for tabs */}
-        <div className="h-24" />
       </div>
-
-      <BottomTabs text={text} />
 
       <SideMenu 
         isOpen={isMenuOpen} 

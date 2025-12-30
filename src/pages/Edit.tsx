@@ -3,13 +3,10 @@ import { Textarea } from '@/components/ui/textarea';
 import { Menu } from 'lucide-react';
 import { useLocation } from 'react-router-dom';
 import { SideMenu } from '@/components/SideMenu';
-import { BottomTabs } from '@/components/BottomTabs';
 import { VoiceEditRecorder } from '@/components/VoiceEditRecorder';
-import { useAuth } from '@/contexts/AuthContext';
 
 const Edit = () => {
   const location = useLocation();
-  const { profile } = useAuth();
   const [text, setText] = useState('');
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [selectedText, setSelectedText] = useState('');
@@ -38,90 +35,73 @@ const Edit = () => {
     setEditMode(null);
   };
 
-  // Get user's background color preference
-  const backgroundColor = profile?.background_color || '#D8DDE4';
-
   return (
-    <div className="min-h-screen bg-background">
-      <div className="max-w-md mx-auto px-4 py-6 space-y-6">
-        {/* Header */}
-        <div className="flex items-center justify-between py-2">
-          <div className="flex-1" />
-          <div className="bg-muted px-6 py-2 rounded-full">
-            <span className="text-sm font-medium text-foreground">EDIT</span>
-          </div>
-          <div className="flex-1 flex justify-end">
+    <div className="min-h-screen bg-background p-4">
+      <div className="max-w-md mx-auto">
+        {/* Card Container */}
+        <div className="bg-card rounded-3xl p-5 space-y-5">
+          {/* Header */}
+          <div className="flex items-center justify-between">
+            <h1 className="text-xl font-semibold text-foreground tracking-wide">Edit</h1>
             <button 
               onClick={() => setIsMenuOpen(true)}
-              className="p-2"
+              className="p-2 hover:bg-muted rounded-lg transition-colors"
             >
-              <Menu className="w-6 h-6 text-foreground" />
+              <Menu className="w-5 h-5 text-muted-foreground" />
             </button>
           </div>
-        </div>
 
-        {/* Text Area */}
-        <div 
-          className="rounded-3xl p-1"
-          style={{ backgroundColor }}
-        >
-          <Textarea
-            ref={textareaRef}
-            value={text}
-            onChange={(e) => setText(e.target.value)}
-            onSelect={handleTextSelect}
-            placeholder="Paste or type your text here to edit..."
-            className="min-h-[300px] text-base resize-none border-0 bg-transparent focus-visible:ring-0 rounded-3xl p-4"
-            style={{ 
-              backgroundColor: 'transparent',
-              color: '#000000'
-            }}
-          />
-        </div>
-
-        {/* Selection indicator */}
-        {selectedText && (
-          <div className="bg-primary h-2 rounded-full" />
-        )}
-
-        {/* Edit Mode Buttons or Active Recorder */}
-        {editMode ? (
-          <div className="space-y-3">
-            <VoiceEditRecorder
-              mode={editMode}
-              selectedText={selectedText}
-              onEditComplete={handleEditComplete}
-              fullText={text}
+          {/* Text Area */}
+          <div className="bg-muted rounded-2xl">
+            <Textarea
+              ref={textareaRef}
+              value={text}
+              onChange={(e) => setText(e.target.value)}
+              onSelect={handleTextSelect}
+              placeholder="Paste or type your text here to edit..."
+              className="min-h-[320px] text-base resize-none border-0 bg-transparent focus-visible:ring-0 rounded-2xl p-4 text-foreground placeholder:text-muted-foreground"
             />
-            <button 
-              onClick={() => setEditMode(null)}
-              className="w-full text-sm text-muted-foreground"
-            >
-              Cancel
-            </button>
           </div>
-        ) : (
-          <div className="flex gap-4">
-            <button
-              onClick={() => setEditMode('delete')}
-              className="flex-1 bg-secondary text-secondary-foreground py-4 rounded-full text-base font-medium"
-            >
-              DELETE
-            </button>
-            <button
-              onClick={() => setEditMode('replace')}
-              className="flex-1 bg-primary text-primary-foreground py-4 rounded-full text-base font-medium"
-            >
-              REPLACE
-            </button>
-          </div>
-        )}
 
-        {/* Bottom padding for tabs */}
-        <div className="h-24" />
+          {/* Selection indicator */}
+          {selectedText && (
+            <div className="bg-primary h-1.5 rounded-full" />
+          )}
+
+          {/* Edit Mode Buttons or Active Recorder */}
+          {editMode ? (
+            <div className="space-y-3">
+              <VoiceEditRecorder
+                mode={editMode}
+                selectedText={selectedText}
+                onEditComplete={handleEditComplete}
+                fullText={text}
+              />
+              <button 
+                onClick={() => setEditMode(null)}
+                className="w-full text-sm text-muted-foreground hover:text-foreground transition-colors"
+              >
+                Cancel
+              </button>
+            </div>
+          ) : (
+            <div className="flex gap-3">
+              <button
+                onClick={() => setEditMode('delete')}
+                className="flex-1 bg-secondary text-secondary-foreground py-3.5 rounded-full text-sm font-medium hover:bg-secondary/90 transition-colors"
+              >
+                Delete
+              </button>
+              <button
+                onClick={() => setEditMode('replace')}
+                className="flex-1 bg-primary text-primary-foreground py-3.5 rounded-full text-sm font-medium hover:bg-primary/90 transition-colors"
+              >
+                Replace
+              </button>
+            </div>
+          )}
+        </div>
       </div>
-
-      <BottomTabs text={text} />
 
       <SideMenu 
         isOpen={isMenuOpen} 
