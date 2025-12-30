@@ -42,10 +42,10 @@ const Edit = () => {
   const backgroundColor = profile?.background_color || '#D8DDE4';
 
   return (
-    <div className="min-h-screen bg-background">
-      <div className="max-w-md mx-auto px-4 py-6 space-y-6">
+    <div className="h-screen flex flex-col bg-background overflow-hidden">
+      <div className="flex-1 flex flex-col max-w-md mx-auto w-full px-4 py-4">
         {/* Header */}
-        <div className="flex items-center justify-between py-2">
+        <div className="flex items-center justify-between py-2 shrink-0">
           <div className="flex-1" />
           <div className="bg-muted px-6 py-2 rounded-full">
             <span className="text-sm font-medium text-foreground">EDIT</span>
@@ -60,9 +60,9 @@ const Edit = () => {
           </div>
         </div>
 
-        {/* Text Area */}
+        {/* Text Area - fills available space */}
         <div 
-          className="rounded-3xl p-1"
+          className="flex-1 rounded-3xl p-1 min-h-0"
           style={{ backgroundColor }}
         >
           <Textarea
@@ -71,7 +71,7 @@ const Edit = () => {
             onChange={(e) => setText(e.target.value)}
             onSelect={handleTextSelect}
             placeholder="Paste or type your text here to edit..."
-            className="min-h-[300px] text-base resize-none border-0 bg-transparent focus-visible:ring-0 rounded-3xl p-4"
+            className="h-full text-base resize-none border-0 bg-transparent focus-visible:ring-0 rounded-3xl p-4"
             style={{ 
               backgroundColor: 'transparent',
               color: '#000000'
@@ -81,44 +81,43 @@ const Edit = () => {
 
         {/* Selection indicator */}
         {selectedText && (
-          <div className="bg-primary h-2 rounded-full" />
+          <div className="bg-primary h-2 rounded-full mt-2 shrink-0" />
         )}
 
         {/* Edit Mode Buttons or Active Recorder */}
-        {editMode ? (
-          <div className="space-y-3">
-            <VoiceEditRecorder
-              mode={editMode}
-              selectedText={selectedText}
-              onEditComplete={handleEditComplete}
-              fullText={text}
-            />
-            <button 
-              onClick={() => setEditMode(null)}
-              className="w-full text-sm text-muted-foreground"
-            >
-              Cancel
-            </button>
-          </div>
-        ) : (
-          <div className="flex gap-4">
-            <button
-              onClick={() => setEditMode('delete')}
-              className="flex-1 bg-secondary text-secondary-foreground py-4 rounded-full text-base font-medium"
-            >
-              DELETE
-            </button>
-            <button
-              onClick={() => setEditMode('replace')}
-              className="flex-1 bg-primary text-primary-foreground py-4 rounded-full text-base font-medium"
-            >
-              REPLACE
-            </button>
-          </div>
-        )}
-
-        {/* Bottom padding for tabs */}
-        <div className="h-24" />
+        <div className="py-4 shrink-0">
+          {editMode ? (
+            <div className="space-y-3">
+              <VoiceEditRecorder
+                mode={editMode}
+                selectedText={selectedText}
+                onEditComplete={handleEditComplete}
+                fullText={text}
+              />
+              <button 
+                onClick={() => setEditMode(null)}
+                className="w-full text-sm text-muted-foreground"
+              >
+                Cancel
+              </button>
+            </div>
+          ) : (
+            <div className="flex gap-4">
+              <button
+                onClick={() => setEditMode('delete')}
+                className="flex-1 bg-secondary text-secondary-foreground py-4 rounded-full text-base font-medium"
+              >
+                DELETE
+              </button>
+              <button
+                onClick={() => setEditMode('replace')}
+                className="flex-1 bg-primary text-primary-foreground py-4 rounded-full text-base font-medium"
+              >
+                REPLACE
+              </button>
+            </div>
+          )}
+        </div>
       </div>
 
       <BottomTabs text={text} />
