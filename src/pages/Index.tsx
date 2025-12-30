@@ -28,10 +28,10 @@ const Index = () => {
   const isPaidUser = profile?.subscription_plan === 'paid';
 
   return (
-    <div className="min-h-screen bg-background">
-      <div className="max-w-md mx-auto px-4 py-6 space-y-6">
+    <div className="h-screen flex flex-col bg-background overflow-hidden">
+      <div className="flex-1 flex flex-col max-w-md mx-auto w-full px-4 py-4">
         {/* Header */}
-        <div className="flex items-center justify-between py-2">
+        <div className="flex items-center justify-between py-2 shrink-0">
           <div className="flex-1" />
           <div className="bg-muted px-6 py-2 rounded-full">
             <span className="text-sm font-medium text-foreground">WRITE</span>
@@ -46,16 +46,16 @@ const Index = () => {
           </div>
         </div>
 
-        {/* Text Area */}
+        {/* Text Area - fills available space */}
         <div 
-          className="rounded-3xl p-1"
+          className="flex-1 rounded-3xl p-1 min-h-0"
           style={{ backgroundColor: isPaidUser ? backgroundColor : '#D8DDE4' }}
         >
           <Textarea
             value={text}
             onChange={(e) => setText(e.target.value)}
             placeholder="Start recording or type here..."
-            className="min-h-[300px] text-base resize-none border-0 bg-transparent focus-visible:ring-0 rounded-3xl p-4"
+            className="h-full text-base resize-none border-0 bg-transparent focus-visible:ring-0 rounded-3xl p-4"
             style={{ 
               backgroundColor: 'transparent',
               color: '#000000'
@@ -64,10 +64,9 @@ const Index = () => {
         </div>
 
         {/* Voice Recorder */}
-        <VoiceRecorder onTranscription={handleTranscription} />
-
-        {/* Bottom padding for tabs */}
-        <div className="h-24" />
+        <div className="py-4 shrink-0">
+          <VoiceRecorder onTranscription={handleTranscription} />
+        </div>
       </div>
 
       <BottomTabs text={text} />
