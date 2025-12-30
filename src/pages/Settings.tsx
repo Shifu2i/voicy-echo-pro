@@ -57,6 +57,7 @@ const Settings = () => {
   const [selectedMic, setSelectedMic] = useState<string>('');
   
   const [isSaving, setIsSaving] = useState(false);
+  const [isMoreExpanded, setIsMoreExpanded] = useState(false);
   
   // Keyboard shortcuts state
   const [shortcuts, setShortcuts] = useState<ShortcutConfig>(() => {
@@ -530,49 +531,73 @@ const Settings = () => {
             </Button>
           </div>
 
-          {/* Floating Widget Mode */}
+
+          {/* More Section */}
           <div className="bg-muted rounded-2xl p-4">
-            <Label className="text-sm font-medium text-foreground flex items-center gap-2">
-              <ExternalLink className="w-4 h-4" />
-              Floating Widget Mode
-            </Label>
-            <p className="text-xs text-muted-foreground mt-1 mb-3">
-              Open a compact floating window for quick voice input
-            </p>
-            <Button
-              onClick={() => navigate('/widget')}
-              variant="outline"
-              className="w-full"
+            <button
+              onClick={() => setIsMoreExpanded(!isMoreExpanded)}
+              className="w-full flex items-center justify-center py-2 text-sm font-medium text-foreground hover:text-foreground/80 transition-colors"
             >
-              <ExternalLink className="w-4 h-4 mr-2" />
-              Open Floating Widget
-            </Button>
+              More
+            </button>
+            
+            {isMoreExpanded && (
+              <div className="mt-4 pt-4 border-t border-border/50 space-y-4">
+                {/* About */}
+                <div>
+                  <label className="text-sm font-medium text-foreground">About</label>
+                  <p className="text-xs text-muted-foreground mt-1">ORATOR v1.0 - Voice-first text editing</p>
+                </div>
+
+                {/* Floating Widget Mode */}
+                <div>
+                  <Label className="text-sm font-medium text-foreground flex items-center gap-2">
+                    <ExternalLink className="w-4 h-4" />
+                    Floating Widget Mode
+                  </Label>
+                  <p className="text-xs text-muted-foreground mt-1 mb-3">
+                    Open a compact floating window for quick voice input
+                  </p>
+                  <Button
+                    onClick={() => navigate('/widget')}
+                    variant="outline"
+                    className="w-full"
+                  >
+                    <ExternalLink className="w-4 h-4 mr-2" />
+                    Open Floating Widget
+                  </Button>
+                </div>
+
+                {/* Sign Out / Sign In */}
+                {user ? (
+                  <Button
+                    onClick={handleSignOut}
+                    variant="outline"
+                    className="w-full rounded-xl py-4"
+                  >
+                    <LogOut className="w-4 h-4 mr-2" />
+                    Sign Out
+                  </Button>
+                ) : (
+                  <Button
+                    onClick={() => navigate('/signin')}
+                    variant="outline"
+                    className="w-full rounded-xl py-4"
+                  >
+                    Sign In
+                  </Button>
+                )}
+              </div>
+            )}
           </div>
 
-          {/* About */}
-          <div className="bg-muted rounded-2xl p-4">
-            <label className="text-sm font-medium text-foreground">About</label>
-            <p className="text-xs text-muted-foreground mt-1">ORATOR v1.0 - Voice-first text editing</p>
-          </div>
-
-          {/* Sign Out / Sign In */}
-          {user ? (
-            <Button
-              onClick={handleSignOut}
-              variant="outline"
-              className="w-full rounded-2xl py-6"
-            >
-              <LogOut className="w-4 h-4 mr-2" />
-              Sign Out
-            </Button>
-          ) : (
-            <Button
-              onClick={() => navigate('/signin')}
-              className="w-full rounded-2xl bg-primary text-primary-foreground py-6"
-            >
-              Sign In
-            </Button>
-          )}
+          {/* Save Button */}
+          <Button
+            onClick={() => toast.success('Settings saved!')}
+            className="w-full rounded-2xl py-6 bg-[hsl(var(--primary))] hover:bg-[hsl(var(--primary))]/90 text-primary-foreground"
+          >
+            Save
+          </Button>
         </div>
 
         {/* Bottom padding for tabs */}
