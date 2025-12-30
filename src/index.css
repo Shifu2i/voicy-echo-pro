@@ -8,94 +8,94 @@ All colors MUST be HSL.
 
 @layer base {
   :root {
-    /* Orator Dark Theme */
-    --background: 220 20% 8%;
-    --foreground: 0 0% 92%;
+    /* Figma Orator color palette */
+    --background: 40 23% 95%;
+    --foreground: 220 15% 20%;
 
-    --card: 220 18% 12%;
-    --card-foreground: 0 0% 92%;
+    --card: 40 23% 95%;
+    --card-foreground: 220 15% 20%;
 
-    --popover: 220 18% 14%;
-    --popover-foreground: 0 0% 92%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 220 15% 20%;
 
     /* Dark green - primary action color */
-    --primary: 153 35% 35%;
+    --primary: 153 43% 30%;
     --primary-foreground: 0 0% 100%;
 
-    /* Slightly lighter green - secondary action */
-    --secondary: 153 25% 28%;
+    /* Light green - secondary action */
+    --secondary: 153 20% 52%;
     --secondary-foreground: 0 0% 100%;
 
-    /* Dark input/textarea background */
-    --muted: 220 15% 16%;
-    --muted-foreground: 0 0% 55%;
+    /* Gray text area */
+    --muted: 213 18% 85%;
+    --muted-foreground: 220 10% 50%;
 
-    /* Border/accent colors */
-    --accent: 220 10% 25%;
-    --accent-foreground: 0 0% 92%;
+    /* Purple/gray accent for borders */
+    --accent: 240 10% 48%;
+    --accent-foreground: 0 0% 100%;
 
-    --destructive: 0 70% 45%;
+    --destructive: 0 70% 55%;
     --destructive-foreground: 0 0% 100%;
 
-    --border: 220 10% 22%;
-    --input: 220 15% 14%;
-    --ring: 153 35% 35%;
+    --border: 240 10% 48%;
+    --input: 213 18% 85%;
+    --ring: 153 43% 30%;
 
     --radius: 1rem;
 
-    --recording: 0 70% 50%;
-    --recording-glow: 0 70% 60%;
+    --recording: 0 70% 55%;
+    --recording-glow: 0 70% 65%;
 
-    --sidebar-background: 220 20% 10%;
-    --sidebar-foreground: 0 0% 90%;
-    --sidebar-primary: 153 35% 40%;
+    --sidebar-background: 40 23% 92%;
+    --sidebar-foreground: 220 10% 30%;
+    --sidebar-primary: 153 43% 30%;
     --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 153 25% 30%;
-    --sidebar-accent-foreground: 0 0% 90%;
-    --sidebar-border: 220 10% 20%;
-    --sidebar-ring: 153 35% 40%;
+    --sidebar-accent: 153 20% 52%;
+    --sidebar-accent-foreground: 0 0% 100%;
+    --sidebar-border: 240 10% 48%;
+    --sidebar-ring: 153 43% 30%;
   }
 
   .dark {
-    --background: 220 20% 6%;
-    --foreground: 0 0% 94%;
+    --background: 220 20% 10%;
+    --foreground: 220 10% 90%;
 
-    --card: 220 18% 10%;
-    --card-foreground: 0 0% 94%;
+    --card: 220 15% 15%;
+    --card-foreground: 220 10% 90%;
 
-    --popover: 220 18% 12%;
-    --popover-foreground: 0 0% 94%;
+    --popover: 220 15% 15%;
+    --popover-foreground: 220 10% 90%;
 
-    --primary: 153 35% 38%;
+    --primary: 153 43% 40%;
     --primary-foreground: 0 0% 100%;
 
-    --secondary: 153 25% 30%;
+    --secondary: 153 20% 45%;
     --secondary-foreground: 0 0% 100%;
 
-    --muted: 220 15% 14%;
-    --muted-foreground: 0 0% 50%;
+    --muted: 220 15% 20%;
+    --muted-foreground: 220 10% 55%;
 
-    --accent: 220 10% 22%;
-    --accent-foreground: 0 0% 94%;
+    --accent: 240 10% 60%;
+    --accent-foreground: 220 20% 10%;
 
-    --destructive: 0 65% 45%;
-    --destructive-foreground: 0 0% 94%;
+    --destructive: 0 65% 50%;
+    --destructive-foreground: 220 10% 90%;
 
-    --border: 220 15% 18%;
-    --input: 220 15% 12%;
-    --ring: 153 35% 38%;
+    --border: 220 15% 22%;
+    --input: 220 15% 22%;
+    --ring: 153 43% 40%;
 
-    --recording: 0 70% 50%;
-    --recording-glow: 0 70% 60%;
+    --recording: 0 70% 55%;
+    --recording-glow: 0 70% 65%;
 
-    --sidebar-background: 220 20% 8%;
-    --sidebar-foreground: 0 0% 92%;
-    --sidebar-primary: 153 35% 42%;
+    --sidebar-background: 220 20% 12%;
+    --sidebar-foreground: 220 10% 90%;
+    --sidebar-primary: 153 43% 45%;
     --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 153 25% 32%;
-    --sidebar-accent-foreground: 0 0% 92%;
-    --sidebar-border: 220 15% 16%;
-    --sidebar-ring: 153 35% 42%;
+    --sidebar-accent: 153 20% 50%;
+    --sidebar-accent-foreground: 220 10% 90%;
+    --sidebar-border: 220 15% 20%;
+    --sidebar-ring: 153 43% 45%;
   }
 }
 

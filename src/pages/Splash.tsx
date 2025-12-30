@@ -8,17 +8,20 @@ const Splash = () => {
   };
 
   return (
-    <div className="min-h-screen bg-background flex items-center justify-center p-4">
-      <div className="bg-card rounded-3xl p-10 flex items-center justify-center">
-        {/* Green circle with ORATOR text - acts as button */}
-        <button
-          onClick={handleStart}
-          className="w-40 h-40 rounded-full bg-primary flex items-center justify-center hover:bg-primary/90 transition-colors active:scale-95 border-4 border-primary/30"
-        >
-          <span className="text-primary-foreground text-xl font-bold tracking-widest">
-            ORATOR
-          </span>
-        </button>
+    <div className="min-h-screen bg-background flex items-center justify-center">
+      <div className="relative">
+        {/* Purple/gray border square */}
+        <div className="w-64 h-64 border-4 border-accent rounded-lg flex items-center justify-center">
+          {/* Green circle with ORATOR text - acts as button */}
+          <button
+            onClick={handleStart}
+            className="w-48 h-48 rounded-full bg-primary flex items-center justify-center hover:bg-primary/90 transition-colors active:scale-95"
+          >
+            <span className="text-primary-foreground text-3xl font-bold tracking-wider">
+              ORATOR
+            </span>
+          </button>
+        </div>
       </div>
     </div>
   );

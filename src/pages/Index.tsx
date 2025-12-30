@@ -4,9 +4,12 @@ import { VoiceRecorder } from '@/components/VoiceRecorder';
 import { Menu } from 'lucide-react';
 import { useLocation } from 'react-router-dom';
 import { SideMenu } from '@/components/SideMenu';
+import { BottomTabs } from '@/components/BottomTabs';
+import { useAuth } from '@/contexts/AuthContext';
 
 const Index = () => {
   const location = useLocation();
+  const { profile } = useAuth();
   const [text, setText] = useState('');
   const [isMenuOpen, setIsMenuOpen] = useState(false);
 
@@ -20,36 +23,54 @@ const Index = () => {
     setText((prev) => (prev ? `${prev} ${transcribedText}` : transcribedText));
   };
 
+  // Get user's background color preference
+  const backgroundColor = profile?.background_color || '#D8DDE4';
+  const isPaidUser = profile?.subscription_plan === 'paid';
+
   return (
-    <div className="min-h-screen bg-background p-4">
-      <div className="max-w-md mx-auto">
-        {/* Card Container */}
-        <div className="bg-card rounded-3xl p-5 space-y-5">
-          {/* Header */}
-          <div className="flex items-center justify-between">
-            <h1 className="text-xl font-semibold text-foreground tracking-wide">Write</h1>
+    <div className="min-h-screen bg-background">
+      <div className="max-w-md mx-auto px-4 py-6 space-y-6">
+        {/* Header */}
+        <div className="flex items-center justify-between py-2">
+          <div className="flex-1" />
+          <div className="bg-muted px-6 py-2 rounded-full">
+            <span className="text-sm font-medium text-foreground">WRITE</span>
+          </div>
+          <div className="flex-1 flex justify-end">
             <button 
               onClick={() => setIsMenuOpen(true)}
-              className="p-2 hover:bg-muted rounded-lg transition-colors"
+              className="p-2"
             >
-              <Menu className="w-5 h-5 text-muted-foreground" />
+              <Menu className="w-6 h-6 text-foreground" />
             </button>
           </div>
-
-          {/* Text Area */}
-          <div className="bg-muted rounded-2xl">
-            <Textarea
-              value={text}
-              onChange={(e) => setText(e.target.value)}
-              placeholder="Start writing..."
-              className="min-h-[320px] text-base resize-none border-0 bg-transparent focus-visible:ring-0 rounded-2xl p-4 text-foreground placeholder:text-muted-foreground"
-            />
-          </div>
-
-          {/* Voice Recorder */}
-          <VoiceRecorder onTranscription={handleTranscription} />
         </div>
+
+        {/* Text Area */}
+        <div 
+          className="rounded-3xl p-1"
+          style={{ backgroundColor: isPaidUser ? backgroundColor : '#D8DDE4' }}
+        >
+          <Textarea
+            value={text}
+            onChange={(e) => setText(e.target.value)}
+            placeholder="Start recording or type here..."
+            className="min-h-[300px] text-base resize-none border-0 bg-transparent focus-visible:ring-0 rounded-3xl p-4"
+            style={{ 
+              backgroundColor: 'transparent',
+              color: '#000000'
+            }}
+          />
+        </div>
+
+        {/* Voice Recorder */}
+        <VoiceRecorder onTranscription={handleTranscription} />
+
+        {/* Bottom padding for tabs */}
+        <div className="h-24" />
       </div>
+
+      <BottomTabs text={text} />
 
       <SideMenu 
         isOpen={isMenuOpen} 
