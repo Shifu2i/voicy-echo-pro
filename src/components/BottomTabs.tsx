@@ -20,7 +20,7 @@ export const BottomTabs = ({ text = '' }: BottomTabsProps) => {
   ];
 
   return (
-    <div className="shrink-0 bg-background border-t border-accent/30 px-6 py-3 safe-area-pb">
+    <div className="fixed bottom-0 left-0 right-0 bg-background border-t border-accent/30 px-6 py-3">
       <div className="max-w-md mx-auto flex items-center justify-around">
         {tabs.map((tab) => {
           const isActive = location.pathname === tab.path;
