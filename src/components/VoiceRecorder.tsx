@@ -130,55 +130,28 @@ export const VoiceRecorder = ({ onTranscription }: VoiceRecorderProps) => {
       recognizerRef.current = null;
     }
 
+    // Stop MediaRecorder
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+      mediaRecorderRef.current.stop();
+      mediaRecorderRef.current.stream.getTracks().forEach(track => track.stop());
+    }
+
     toast.success('Processing with Whisper...');
 
     try {
-      // Wait for MediaRecorder to finish and collect all audio data
-      const audioBlob = await new Promise<Blob>((resolve, reject) => {
-        const mediaRecorder = mediaRecorderRef.current;
+      if (audioChunksRef.current.length > 0) {
+        const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
+        const transcription = await transcribeAudio(audioBlob);
         
-        if (!mediaRecorder || mediaRecorder.state === 'inactive') {
-          // If recorder is already stopped, use existing chunks
-          if (audioChunksRef.current.length > 0) {
-            resolve(new Blob(audioChunksRef.current, { type: 'audio/webm' }));
-          } else {
-            reject(new Error('No audio recorded'));
-          }
-          return;
+        if (transcription && transcription.trim()) {
+          const processed = processVoiceCommands(transcription.trim());
+          onTranscription(processed + ' ');
+          setPartialText('');
+        } else {
+          toast.error('No speech detected');
         }
-
-        mediaRecorder.ondataavailable = (event) => {
-          if (event.data.size > 0) {
-            audioChunksRef.current.push(event.data);
-          }
-        };
-
-        mediaRecorder.onstop = () => {
-          // Stop all tracks
-          mediaRecorder.stream.getTracks().forEach(track => track.stop());
-          
-          if (audioChunksRef.current.length > 0) {
-            resolve(new Blob(audioChunksRef.current, { type: 'audio/webm' }));
-          } else {
-            reject(new Error('No audio recorded'));
-          }
-        };
-
-        mediaRecorder.onerror = (event) => {
-          reject(new Error('MediaRecorder error'));
-        };
-
-        mediaRecorder.stop();
-      });
-
-      const transcription = await transcribeAudio(audioBlob);
-      
-      if (transcription && transcription.trim() && !transcription.includes('[BLANK_AUDIO]')) {
-        const processed = processVoiceCommands(transcription.trim());
-        onTranscription(processed + ' ');
-        setPartialText('');
       } else {
-        toast.error('No speech detected');
+        toast.error('No audio recorded');
       }
     } catch (error) {
       console.error('Whisper transcription failed:', error);
