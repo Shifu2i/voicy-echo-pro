@@ -164,11 +164,11 @@ export const VoiceRecorder = ({ onTranscription }: VoiceRecorderProps) => {
 
   if (modelStatus === 'loading') {
     return (
-      <div className="p-4 rounded-xl bg-card border border-border">
+      <div className="p-4 rounded-xl bg-muted border border-border">
         <div className="flex items-center gap-3 mb-3">
           <Loader2 className="h-5 w-5 text-primary animate-spin" />
           <div>
-            <p className="text-sm font-medium">Loading Whisper AI...</p>
+            <p className="text-sm font-medium text-foreground">Loading Whisper AI...</p>
             <p className="text-xs text-muted-foreground">
               {whisperDevice === 'wasm' ? 'Using CPU mode' : 'One-time download for offline use'}
             </p>
@@ -198,8 +198,8 @@ export const VoiceRecorder = ({ onTranscription }: VoiceRecorderProps) => {
           variant={isRecording ? 'destructive' : 'default'}
           size="lg"
           className={`
-            relative overflow-hidden smooth-transition w-full py-6 text-base rounded-full
-            ${isRecording ? 'recording-pulse glow-recording' : ''}
+            relative overflow-hidden smooth-transition w-full py-6 text-sm rounded-full
+            ${isRecording ? 'recording-pulse glow-recording' : 'bg-primary hover:bg-primary/90'}
           `}
         >
           {isProcessing ? (
@@ -210,26 +210,26 @@ export const VoiceRecorder = ({ onTranscription }: VoiceRecorderProps) => {
           ) : isRecording ? (
             <>
               <Square className="mr-2 h-5 w-5" />
-              STOP
+              Stop
             </>
           ) : (
             <>
               <Mic className="mr-2 h-5 w-5" />
-              DICTATE
+              Dictate
             </>
           )}
         </Button>
       </div>
 
       {partialText && (
-        <div className="p-3 rounded-lg bg-muted/50 border border-border">
-          <p className="text-xs text-muted-foreground mb-1">Preview (VOSK):</p>
-          <p className="text-sm italic">{partialText}...</p>
+        <div className="p-3 rounded-xl bg-input border border-border">
+          <p className="text-xs text-muted-foreground mb-1">Preview:</p>
+          <p className="text-sm italic text-foreground">{partialText}...</p>
         </div>
       )}
 
       {!voskReady && modelStatus === 'ready' && (
-        <div className="flex items-center gap-2 text-xs text-muted-foreground">
+        <div className="flex items-center gap-2 text-xs text-muted-foreground justify-center">
           <Loader2 className="h-3 w-3 animate-spin" />
           <span>Loading real-time preview...</span>
         </div>
