@@ -289,162 +289,6 @@ const Settings = () => {
             </p>
           </div>
 
-          {/* Background Color */}
-          {user && (
-            <div className="bg-muted rounded-2xl p-4">
-              <Label className="text-sm font-medium text-foreground">
-                Reading Background Color
-              </Label>
-              <p className="text-xs text-muted-foreground mt-1 mb-3">
-                Choose a dyslexia-friendly background color
-              </p>
-              <div className="grid grid-cols-4 gap-2">
-                {DYSLEXIA_COLORS.map((color) => (
-                  <button
-                    key={color.value}
-                    onClick={() => handleSaveBackgroundColor(color.value)}
-                    disabled={isSaving}
-                    className={`w-full aspect-square rounded-xl border-2 transition-all ${
-                      backgroundColor === color.value
-                        ? 'border-primary ring-2 ring-primary ring-offset-2'
-                        : 'border-transparent hover:border-muted-foreground/30'
-                    }`}
-                    style={{ backgroundColor: color.value }}
-                    title={color.name}
-                  />
-                ))}
-              </div>
-              <p className="text-xs text-muted-foreground mt-2 text-center">
-                {DYSLEXIA_COLORS.find(c => c.value === backgroundColor)?.name || 'Custom'}
-              </p>
-
-              {/* Custom Background Hex Input */}
-              <div className="mt-4 pt-4 border-t border-border/50">
-                <Label className="text-xs text-muted-foreground mb-2 block">
-                  Custom Hex Color
-                </Label>
-                <div className="flex gap-2 items-center">
-                  <div 
-                    className="w-10 h-10 rounded-lg border-2 border-border shrink-0"
-                    style={{ backgroundColor: isValidHex(customBgHex) ? customBgHex : '#FFFFFF' }}
-                  />
-                  <Input
-                    type="text"
-                    placeholder="#FF5733"
-                    value={customBgHex}
-                    onChange={(e) => handleBgHexInputChange(e.target.value)}
-                    className="flex-1 font-mono uppercase"
-                    maxLength={7}
-                  />
-                  <Button
-                    onClick={handleSaveCustomBgColor}
-                    disabled={isSaving || !isValidHex(customBgHex)}
-                    size="sm"
-                  >
-                    Save
-                  </Button>
-                </div>
-                {bgHexError && (
-                  <p className="text-xs text-destructive mt-1">{bgHexError}</p>
-                )}
-              </div>
-            </div>
-          )}
-
-          {/* Writing/Text Color */}
-          {user && (
-            <div className="bg-muted rounded-2xl p-4">
-              <Label className="text-sm font-medium text-foreground">
-                Text Color
-              </Label>
-              <p className="text-xs text-muted-foreground mt-1 mb-3">
-                Choose your preferred text color for reading
-              </p>
-              <div className="grid grid-cols-6 gap-2">
-                {TEXT_COLORS.map((color) => (
-                  <button
-                    key={color.value}
-                    onClick={() => handleSaveWritingColor(color.value)}
-                    disabled={isSaving}
-                    className={`w-full aspect-square rounded-xl border-2 transition-all ${
-                      writingColor === color.value
-                        ? 'border-primary ring-2 ring-primary ring-offset-2'
-                        : 'border-transparent hover:border-muted-foreground/30'
-                    }`}
-                    style={{ backgroundColor: color.value }}
-                    title={color.name}
-                  />
-                ))}
-              </div>
-              <p className="text-xs text-muted-foreground mt-2 text-center">
-                {TEXT_COLORS.find(c => c.value === writingColor)?.name || 'Custom'}
-              </p>
-
-              {/* Custom Text Hex Input */}
-              <div className="mt-4 pt-4 border-t border-border/50">
-                <Label className="text-xs text-muted-foreground mb-2 block">
-                  Custom Hex Color
-                </Label>
-                <div className="flex gap-2 items-center">
-                  <div 
-                    className="w-10 h-10 rounded-lg border-2 border-border shrink-0"
-                    style={{ backgroundColor: isValidHex(customTextHex) ? customTextHex : '#000000' }}
-                  />
-                  <Input
-                    type="text"
-                    placeholder="#333333"
-                    value={customTextHex}
-                    onChange={(e) => handleTextHexInputChange(e.target.value)}
-                    className="flex-1 font-mono uppercase"
-                    maxLength={7}
-                  />
-                  <Button
-                    onClick={handleSaveCustomTextColor}
-                    disabled={isSaving || !isValidHex(customTextHex)}
-                    size="sm"
-                  >
-                    Save
-                  </Button>
-                </div>
-                {textHexError && (
-                  <p className="text-xs text-destructive mt-1">{textHexError}</p>
-                )}
-              </div>
-            </div>
-          )}
-
-          {/* Microphone Input */}
-          <div className="bg-muted rounded-2xl p-4">
-            <Label className="text-sm font-medium text-foreground flex items-center gap-2">
-              <Mic className="w-4 h-4" />
-              Microphone Input
-            </Label>
-            <p className="text-xs text-muted-foreground mt-1 mb-3">
-              Select your preferred microphone for voice recording
-            </p>
-            {audioDevices.length > 0 ? (
-              <>
-                <Select value={selectedMic} onValueChange={handleMicChange}>
-                  <SelectTrigger className="w-full bg-background">
-                    <SelectValue placeholder="Select a microphone" />
-                  </SelectTrigger>
-                  <SelectContent className="bg-background border border-border z-50">
-                    {audioDevices.map((device) => (
-                      <SelectItem key={device.deviceId} value={device.deviceId}>
-                        {device.label || `Microphone ${device.deviceId.slice(0, 8)}`}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <MicTest deviceId={selectedMic} />
-              </>
-            ) : (
-              <p className="text-xs text-muted-foreground">
-                No microphones detected. Please allow microphone access.
-              </p>
-            )}
-          </div>
-
           {/* Voice Model */}
           <div className="bg-muted rounded-2xl p-4">
             <label className="text-sm font-medium text-foreground">Voice Model</label>
@@ -531,7 +375,6 @@ const Settings = () => {
             </Button>
           </div>
 
-
           {/* More Section */}
           <div className="bg-muted rounded-2xl p-4">
             <button
@@ -542,7 +385,128 @@ const Settings = () => {
             </button>
             
             {isMoreExpanded && (
-              <div className="mt-4 pt-4 border-t border-border/50 space-y-4">
+              <div className="mt-4 pt-4 border-t border-border/50 space-y-6">
+                {/* Background Color */}
+                {user && (
+                  <div>
+                    <Label className="text-sm font-medium text-foreground">
+                      Reading Background Color
+                    </Label>
+                    <div className="grid grid-cols-4 gap-2 mt-3">
+                      {DYSLEXIA_COLORS.map((color) => (
+                        <button
+                          key={color.value}
+                          onClick={() => handleSaveBackgroundColor(color.value)}
+                          disabled={isSaving}
+                          className={`w-full aspect-square rounded-xl border-2 transition-all ${
+                            backgroundColor === color.value
+                              ? 'border-primary ring-2 ring-primary ring-offset-2'
+                              : 'border-transparent hover:border-muted-foreground/30'
+                          }`}
+                          style={{ backgroundColor: color.value }}
+                          title={color.name}
+                        />
+                      ))}
+                    </div>
+                    <div className="flex gap-2 items-center mt-3">
+                      <Input
+                        type="text"
+                        placeholder="#1E1E1E"
+                        value={customBgHex}
+                        onChange={(e) => handleBgHexInputChange(e.target.value)}
+                        className="flex-1 font-mono uppercase bg-background"
+                        maxLength={7}
+                      />
+                      <Button
+                        onClick={handleSaveCustomBgColor}
+                        disabled={isSaving || !isValidHex(customBgHex)}
+                        size="sm"
+                        variant="secondary"
+                      >
+                        Set
+                      </Button>
+                    </div>
+                    {bgHexError && (
+                      <p className="text-xs text-destructive mt-1">{bgHexError}</p>
+                    )}
+                  </div>
+                )}
+
+                {/* Text Color */}
+                {user && (
+                  <div>
+                    <Label className="text-sm font-medium text-foreground">
+                      Text Color
+                    </Label>
+                    <div className="grid grid-cols-4 gap-2 mt-3">
+                      {TEXT_COLORS.map((color) => (
+                        <button
+                          key={color.value}
+                          onClick={() => handleSaveWritingColor(color.value)}
+                          disabled={isSaving}
+                          className={`w-full aspect-square rounded-xl border-2 transition-all ${
+                            writingColor === color.value
+                              ? 'border-primary ring-2 ring-primary ring-offset-2'
+                              : 'border-transparent hover:border-muted-foreground/30'
+                          }`}
+                          style={{ backgroundColor: color.value }}
+                          title={color.name}
+                        />
+                      ))}
+                    </div>
+                    <div className="flex gap-2 items-center mt-3">
+                      <Input
+                        type="text"
+                        placeholder="#333333"
+                        value={customTextHex}
+                        onChange={(e) => handleTextHexInputChange(e.target.value)}
+                        className="flex-1 font-mono uppercase bg-background"
+                        maxLength={7}
+                      />
+                      <Button
+                        onClick={handleSaveCustomTextColor}
+                        disabled={isSaving || !isValidHex(customTextHex)}
+                        size="sm"
+                        variant="secondary"
+                      >
+                        Set
+                      </Button>
+                    </div>
+                    {textHexError && (
+                      <p className="text-xs text-destructive mt-1">{textHexError}</p>
+                    )}
+                  </div>
+                )}
+
+                {/* Microphone Input */}
+                <div>
+                  <Label className="text-sm font-medium text-foreground flex items-center gap-2">
+                    <Mic className="w-4 h-4" />
+                    Microphone Input
+                  </Label>
+                  {audioDevices.length > 0 ? (
+                    <>
+                      <Select value={selectedMic} onValueChange={handleMicChange}>
+                        <SelectTrigger className="w-full bg-background mt-3">
+                          <SelectValue placeholder="Select a microphone" />
+                        </SelectTrigger>
+                        <SelectContent className="bg-background border border-border z-50">
+                          {audioDevices.map((device) => (
+                            <SelectItem key={device.deviceId} value={device.deviceId}>
+                              {device.label || `Microphone ${device.deviceId.slice(0, 8)}`}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <MicTest deviceId={selectedMic} />
+                    </>
+                  ) : (
+                    <p className="text-xs text-muted-foreground mt-2">
+                      No microphones detected. Please allow microphone access.
+                    </p>
+                  )}
+                </div>
+
                 {/* About */}
                 <div>
                   <label className="text-sm font-medium text-foreground">About</label>
