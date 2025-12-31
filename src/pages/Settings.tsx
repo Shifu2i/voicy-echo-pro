@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Menu, LogOut, Mic, Keyboard, Trash2, RefreshCw, RotateCcw, ExternalLink } from 'lucide-react';
+import { Menu, LogOut, Mic, Keyboard, Trash2, RefreshCw, RotateCcw, ExternalLink, Volume2, Play } from 'lucide-react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { SideMenu } from '@/components/SideMenu';
 import { BottomTabs } from '@/components/BottomTabs';
@@ -9,10 +9,12 @@ import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Slider } from '@/components/ui/slider';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { ShortcutConfig, formatShortcut, parseKeyEvent, DEFAULT_SHORTCUTS } from '@/hooks/useKeyboardShortcuts';
+import { getAvailableVoices, loadTTSSettings, saveTTSSettings, speak, TTSSettings } from '@/utils/textToSpeech';
 
 // Reading background color options
 const DYSLEXIA_COLORS = [
@@ -62,6 +64,11 @@ const Settings = () => {
   const [isSaving, setIsSaving] = useState(false);
   const [isMoreExpanded, setIsMoreExpanded] = useState(false);
   
+  // TTS settings state
+  const [voices, setVoices] = useState<SpeechSynthesisVoice[]>([]);
+  const [ttsSettings, setTtsSettings] = useState<TTSSettings>(loadTTSSettings);
+  const [isTesting, setIsTesting] = useState(false);
+  
   // Keyboard shortcuts state
   const [shortcuts, setShortcuts] = useState<ShortcutConfig>(() => {
     try {
@@ -100,6 +107,42 @@ const Settings = () => {
     
     loadAudioDevices();
   }, []);
+
+  // Load TTS voices
+  useEffect(() => {
+    const loadVoices = () => {
+      const availableVoices = getAvailableVoices();
+      setVoices(availableVoices);
+    };
+
+    loadVoices();
+    // Voices may load async in some browsers
+    if ('speechSynthesis' in window) {
+      window.speechSynthesis.onvoiceschanged = loadVoices;
+    }
+    
+    return () => {
+      if ('speechSynthesis' in window) {
+        window.speechSynthesis.onvoiceschanged = null;
+      }
+    };
+  }, []);
+
+  const handleTTSChange = (key: keyof TTSSettings, value: string | number) => {
+    const updated = { ...ttsSettings, [key]: value };
+    setTtsSettings(updated);
+    saveTTSSettings(updated);
+  };
+
+  const handleTestVoice = async () => {
+    setIsTesting(true);
+    try {
+      await speak("Hello! This is a test of the text to speech settings.", ttsSettings);
+    } catch (e) {
+      console.error('TTS test failed:', e);
+    }
+    setIsTesting(false);
+  };
 
   useEffect(() => {
     if (profile) {
@@ -297,6 +340,84 @@ const Settings = () => {
             <p className="text-xs text-muted-foreground mt-1">
               {user ? user.email : 'Not signed in'}
             </p>
+          </div>
+
+          {/* Text-to-Speech Settings */}
+          <div className="bg-muted rounded-2xl p-4">
+            <Label className="text-sm font-medium text-foreground flex items-center gap-2">
+              <Volume2 className="w-4 h-4" />
+              Text-to-Speech
+            </Label>
+            <p className="text-xs text-muted-foreground mt-1 mb-3">
+              Customize how text is read aloud
+            </p>
+            
+            {/* Voice Selection */}
+            <div className="space-y-3">
+              <div>
+                <label className="text-xs text-muted-foreground">Voice</label>
+                <Select 
+                  value={ttsSettings.voiceURI} 
+                  onValueChange={(v) => handleTTSChange('voiceURI', v)}
+                >
+                  <SelectTrigger className="w-full bg-background mt-1">
+                    <SelectValue placeholder="System default" />
+                  </SelectTrigger>
+                  <SelectContent className="bg-background border border-border z-50 max-h-60">
+                    <SelectItem value="">System default</SelectItem>
+                    {voices.map((voice) => (
+                      <SelectItem key={voice.voiceURI} value={voice.voiceURI}>
+                        {voice.name} ({voice.lang})
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              
+              {/* Rate Slider */}
+              <div>
+                <div className="flex justify-between items-center">
+                  <label className="text-xs text-muted-foreground">Speed</label>
+                  <span className="text-xs text-muted-foreground">{ttsSettings.rate.toFixed(1)}x</span>
+                </div>
+                <Slider
+                  value={[ttsSettings.rate]}
+                  onValueChange={([v]) => handleTTSChange('rate', v)}
+                  min={0.5}
+                  max={2}
+                  step={0.1}
+                  className="mt-2"
+                />
+              </div>
+              
+              {/* Pitch Slider */}
+              <div>
+                <div className="flex justify-between items-center">
+                  <label className="text-xs text-muted-foreground">Pitch</label>
+                  <span className="text-xs text-muted-foreground">{ttsSettings.pitch.toFixed(1)}</span>
+                </div>
+                <Slider
+                  value={[ttsSettings.pitch]}
+                  onValueChange={([v]) => handleTTSChange('pitch', v)}
+                  min={0.5}
+                  max={2}
+                  step={0.1}
+                  className="mt-2"
+                />
+              </div>
+              
+              {/* Test Button */}
+              <Button
+                onClick={handleTestVoice}
+                disabled={isTesting}
+                variant="outline"
+                size="sm"
+                className="w-full mt-2"
+              >
+                <Play className="w-3 h-3 mr-2" />
+                {isTesting ? 'Playing...' : 'Test Voice'}
+              </Button>
+            </div>
           </div>
 
           {/* Voice Model */}

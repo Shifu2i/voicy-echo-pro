@@ -123,7 +123,7 @@ export const VoiceCommandsGuide = () => {
               <li><span className="font-medium text-foreground">"Stop reading"</span> — stop text-to-speech</li>
             </ul>
             <p className="text-[10px] text-muted-foreground/70 mt-2">
-              Tip: Uses your browser's built-in text-to-speech
+              Tip: Customize voice, speed & pitch in Settings → Text-to-Speech
             </p>
           </AccordionContent>
         </AccordionItem>
