@@ -124,7 +124,7 @@ export function parseEditCommand(transcription: string): EditCommand {
   if (/read\s*(it\s*)?back|read\s*that|read\s*(the\s*)?last\s*sentence/i.test(text)) {
     return { type: 'read', readType: 'back' };
   }
-  if (/read\s*all|read\s*everything|read\s*(the\s*)?document/i.test(text)) {
+  if (/read\s*(it\s*)?(all|everything)|read\s*(the\s*)?(whole\s*)?(document|text|page)/i.test(text)) {
     return { type: 'read', readType: 'all' };
   }
   if (/read\s*(the\s*)?selection|read\s*selected/i.test(text)) {
