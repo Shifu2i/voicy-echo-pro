@@ -231,7 +231,8 @@ export const VoiceCommandRecorder = ({
         }
         
         case 'read': {
-          if (/^(stop reading|stop)$/i.test(cleanedTranscription)) {
+          // Check for stop command first
+          if (/stop\s*reading|^stop$|stop\s*that|be\s*quiet|quiet/i.test(cleanedTranscription)) {
             stopSpeaking();
             toast.info('Stopped reading');
             setLastAction('Stopped reading');

@@ -55,22 +55,31 @@ const REDO_PATTERNS = [
 ];
 
 const WORD_COUNT_PATTERNS = [
-  /^word count$/i,
-  /^how many words$/i,
-  /^count words$/i,
+  /word\s*count/i,
+  /how many words/i,
+  /count\s*(the\s*)?(my\s*)?words/i,
+  /words?\s*count/i,
 ];
 
 const READ_PATTERNS = [
-  /^read back$/i,
-  /^read that$/i,
-  /^read the last sentence$/i,
-  /^read all$/i,
-  /^read everything$/i,
-  /^read document$/i,
-  /^read selection$/i,
-  /^read selected$/i,
-  /^stop reading$/i,
+  /read\s*(it\s*)?back/i,
+  /read\s*that/i,
+  /read\s*(the\s*)?last\s*sentence/i,
+  /read\s*all/i,
+  /read\s*everything/i,
+  /read\s*(the\s*)?document/i,
+  /read\s*(the\s*)?selection/i,
+  /read\s*selected/i,
+  /stop\s*reading/i,
   /^stop$/i,
+];
+
+const STOP_PATTERNS = [
+  /stop\s*reading/i,
+  /^stop$/i,
+  /stop\s*that/i,
+  /be\s*quiet/i,
+  /quiet/i,
 ];
 
 export function parseEditCommand(transcription: string): EditCommand {
@@ -104,17 +113,21 @@ export function parseEditCommand(transcription: string): EditCommand {
     }
   }
   
-  // Try read patterns
-  if (/^(stop reading|stop)$/i.test(text)) {
-    return { type: 'read', readType: 'back' }; // Special case: stop
+  // Try stop patterns first (before read patterns)
+  for (const pattern of STOP_PATTERNS) {
+    if (pattern.test(text)) {
+      return { type: 'read', readType: 'back' }; // Special case: stop uses readType to signal stop
+    }
   }
-  if (/^(read back|read that|read the last sentence)$/i.test(text)) {
+  
+  // Try read patterns
+  if (/read\s*(it\s*)?back|read\s*that|read\s*(the\s*)?last\s*sentence/i.test(text)) {
     return { type: 'read', readType: 'back' };
   }
-  if (/^(read all|read everything|read document)$/i.test(text)) {
+  if (/read\s*all|read\s*everything|read\s*(the\s*)?document/i.test(text)) {
     return { type: 'read', readType: 'all' };
   }
-  if (/^(read selection|read selected)$/i.test(text)) {
+  if (/read\s*(the\s*)?selection|read\s*selected/i.test(text)) {
     return { type: 'read', readType: 'selection' };
   }
   
