@@ -14,6 +14,7 @@ import {
 } from '@/utils/voiceEditCommands';
 import { speak, stopSpeaking, getLastSentence, getTextStats } from '@/utils/textToSpeech';
 import { Progress } from '@/components/ui/progress';
+import { AudioWaveform } from '@/components/AudioWaveform';
 
 interface VoiceCommandRecorderProps {
   fullText: string;
@@ -43,6 +44,8 @@ export const VoiceCommandRecorder = ({
   const [loadProgress, setLoadProgress] = useState(0);
   const [voskReady, setVoskReady] = useState(isModelLoaded());
   const [lastAction, setLastAction] = useState<string>('');
+  
+  const [audioStream, setAudioStream] = useState<MediaStream | null>(null);
   
   const recognizerRef = useRef<VoskRecognizer | null>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
@@ -107,6 +110,8 @@ export const VoiceCommandRecorder = ({
       }
 
       const stream = await navigator.mediaDevices.getUserMedia({ audio: audioConstraints });
+      setAudioStream(stream);
+      
       const mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm' });
       mediaRecorderRef.current = mediaRecorder;
 
@@ -133,6 +138,7 @@ export const VoiceCommandRecorder = ({
     setIsRecording(false);
     setIsProcessing(true);
     setPartialText('');
+    setAudioStream(null);
 
     if (recognizerRef.current) {
       recognizerRef.current.stop();
@@ -416,6 +422,11 @@ export const VoiceCommandRecorder = ({
           </Button>
         )}
       </div>
+
+      {/* Audio Waveform Visualizer */}
+      {isRecording && (
+        <AudioWaveform stream={audioStream} isActive={isRecording} />
+      )}
 
       {partialText && (
         <div className="p-3 rounded-lg bg-muted/50 border border-border">
