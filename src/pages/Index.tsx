@@ -23,8 +23,9 @@ const Index = () => {
     setText((prev) => (prev ? `${prev} ${transcribedText}` : transcribedText));
   };
 
-  // Get user's background color preference
+  // Get user's color preferences
   const backgroundColor = profile?.background_color || '#D8DDE4';
+  const writingColor = profile?.writing_color || '#000000';
   const isPaidUser = profile?.subscription_plan === 'paid';
 
   return (
@@ -58,7 +59,7 @@ const Index = () => {
             className="min-h-[300px] text-base resize-none border-0 bg-transparent focus-visible:ring-0 rounded-3xl p-4"
             style={{ 
               backgroundColor: 'transparent',
-              color: '#000000'
+              color: isPaidUser ? writingColor : '#000000'
             }}
           />
         </div>

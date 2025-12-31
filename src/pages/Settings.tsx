@@ -13,26 +13,28 @@ import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { ShortcutConfig, formatShortcut, parseKeyEvent, DEFAULT_SHORTCUTS } from '@/hooks/useKeyboardShortcuts';
 
-// Dyslexia-friendly background color options
+// Reading background color options
 const DYSLEXIA_COLORS = [
-  { name: 'Cream', value: '#FFFAF0', textColor: '#000000' },
-  { name: 'Soft Blue', value: '#E6F3FF', textColor: '#000000' },
-  { name: 'Soft Yellow', value: '#FFFACD', textColor: '#000000' },
-  { name: 'Soft Pink', value: '#FFE4E1', textColor: '#000000' },
-  { name: 'Soft Green', value: '#E8F5E9', textColor: '#000000' },
-  { name: 'Peach', value: '#FFDAB9', textColor: '#000000' },
-  { name: 'Lavender', value: '#E6E6FA', textColor: '#000000' },
-  { name: 'Light Gray', value: '#F5F5F5', textColor: '#000000' },
+  { name: 'Dark Teal', value: '#1E3A3A' },
+  { name: 'Soft Blue', value: '#A4C4D4' },
+  { name: 'Soft Yellow', value: '#F5E6A3' },
+  { name: 'Soft Pink', value: '#F5D0D0' },
+  { name: 'Soft Green', value: '#C4E6C4' },
+  { name: 'Peach', value: '#F5D4A8' },
+  { name: 'Lavender', value: '#E0D4F5' },
+  { name: 'White', value: '#FFFFFF' },
 ];
 
 // Text color presets
 const TEXT_COLORS = [
   { name: 'Black', value: '#000000' },
-  { name: 'Dark Gray', value: '#333333' },
-  { name: 'Navy', value: '#1a1a4e' },
-  { name: 'Dark Brown', value: '#3d2914' },
-  { name: 'Dark Green', value: '#1a3d1a' },
-  { name: 'Dark Purple', value: '#2d1a4e' },
+  { name: 'Dark Gray', value: '#4A4A4A' },
+  { name: 'Navy', value: '#1a1a6e' },
+  { name: 'Dark Brown', value: '#6B4423' },
+  { name: 'Dark Green', value: '#2D5A2D' },
+  { name: 'Light Green', value: '#6B8E6B' },
+  { name: 'Dark Purple', value: '#3D1A5E' },
+  { name: 'Olive', value: '#556B2F' },
 ];
 
 const Settings = () => {
