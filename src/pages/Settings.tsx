@@ -4,6 +4,7 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { SideMenu } from '@/components/SideMenu';
 import { BottomTabs } from '@/components/BottomTabs';
 import { MicTest } from '@/components/MicTest';
+import { VoiceCommandsGuide } from '@/components/VoiceCommandsGuide';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -287,6 +288,9 @@ const Settings = () => {
 
         {/* Settings Content */}
         <div className="space-y-4">
+          {/* Voice Commands Guide */}
+          <VoiceCommandsGuide />
+
           {/* Account Info */}
           <div className="bg-muted rounded-2xl p-4">
             <label className="text-sm font-medium text-foreground">Account</label>

@@ -1,6 +1,6 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
-import { Mic, Square, Loader2, Undo2 } from 'lucide-react';
+import { Mic, Square, Loader2, Undo2, Redo2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { VoskRecognizer, isModelLoaded, loadModel, getSelectedMicrophoneId } from '@/services/voskRecognition';
 import { loadWhisperModel, transcribeAudio, isWhisperLoaded } from '@/services/whisperRecognition';
@@ -9,22 +9,32 @@ import {
   parseEditCommand, 
   executeReplaceCommand, 
   executeDeleteCommand,
-  executeInsertCommand 
+  executeInsertCommand,
+  executeCapitalizeCommand
 } from '@/utils/voiceEditCommands';
+import { speak, stopSpeaking, getLastSentence, getTextStats } from '@/utils/textToSpeech';
 import { Progress } from '@/components/ui/progress';
 
 interface VoiceCommandRecorderProps {
   fullText: string;
   onEditComplete: (result: string) => void;
   onUndo?: () => string | null;
+  onRedo?: () => string | null;
   canUndo?: boolean;
+  canRedo?: boolean;
+  selectedText?: string;
+  lastUtterance?: string;
 }
 
 export const VoiceCommandRecorder = ({ 
   fullText, 
   onEditComplete, 
   onUndo,
-  canUndo = false 
+  onRedo,
+  canUndo = false,
+  canRedo = false,
+  selectedText = '',
+  lastUtterance = ''
 }: VoiceCommandRecorderProps) => {
   const [isRecording, setIsRecording] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
@@ -153,24 +163,107 @@ export const VoiceCommandRecorder = ({
       const cleanedTranscription = processVoiceCommands(transcription.trim());
       const command = parseEditCommand(cleanedTranscription);
 
-      // Handle undo command
-      if (cleanedTranscription.toLowerCase() === 'undo' || 
-          cleanedTranscription.toLowerCase() === 'undo that') {
-        if (onUndo) {
-          const previousText = onUndo();
-          if (previousText !== null) {
-            onEditComplete(previousText);
-            toast.success('Undone');
-            setLastAction('Undid last change');
-          } else {
-            toast.error('Nothing to undo');
-          }
-        }
-        setIsProcessing(false);
-        return;
-      }
-
       switch (command.type) {
+        case 'undo': {
+          if (onUndo) {
+            const previousText = onUndo();
+            if (previousText !== null) {
+              onEditComplete(previousText);
+              toast.success('Undone');
+              setLastAction('Undid last change');
+            } else {
+              toast.error('Nothing to undo');
+            }
+          }
+          setIsProcessing(false);
+          return;
+        }
+        
+        case 'redo': {
+          if (onRedo) {
+            const nextText = onRedo();
+            if (nextText !== null) {
+              onEditComplete(nextText);
+              toast.success('Redone');
+              setLastAction('Redid last change');
+            } else {
+              toast.error('Nothing to redo');
+            }
+          }
+          setIsProcessing(false);
+          return;
+        }
+        
+        case 'scratch': {
+          if (lastUtterance && fullText.includes(lastUtterance)) {
+            const newText = fullText.replace(new RegExp(lastUtterance.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\s*$'), '').trim();
+            onEditComplete(newText);
+            toast.success('Scratched last phrase');
+            setLastAction(`Removed: "${lastUtterance}"`);
+          } else {
+            toast.error('No recent phrase to scratch');
+          }
+          setIsProcessing(false);
+          return;
+        }
+        
+        case 'word-count': {
+          const stats = getTextStats(fullText);
+          const message = `${stats.words} words, ${stats.characters} characters, ${stats.sentences} sentences`;
+          toast.info(message, { duration: 5000 });
+          speak(message);
+          setLastAction(message);
+          setIsProcessing(false);
+          return;
+        }
+        
+        case 'read': {
+          if (/^(stop reading|stop)$/i.test(cleanedTranscription)) {
+            stopSpeaking();
+            toast.info('Stopped reading');
+            setLastAction('Stopped reading');
+            setIsProcessing(false);
+            return;
+          }
+          
+          let textToRead = '';
+          if (command.readType === 'back') {
+            textToRead = getLastSentence(fullText);
+            setLastAction('Reading last sentence');
+          } else if (command.readType === 'all') {
+            textToRead = fullText;
+            setLastAction('Reading document');
+          } else if (command.readType === 'selection') {
+            if (selectedText) {
+              textToRead = selectedText;
+              setLastAction('Reading selection');
+            } else {
+              toast.error('No text selected');
+              setIsProcessing(false);
+              return;
+            }
+          }
+          
+          if (textToRead) {
+            speak(textToRead);
+            toast.info('Reading aloud...');
+          }
+          setIsProcessing(false);
+          return;
+        }
+        
+        case 'capitalize': {
+          const result = executeCapitalizeCommand(fullText, command.target);
+          if (result) {
+            onEditComplete(result.newText);
+            toast.success(`Capitalized "${result.word}"`);
+            setLastAction(`Capitalized "${result.word}"`);
+          } else {
+            toast.error('No word to capitalize');
+          }
+          setIsProcessing(false);
+          return;
+        }
         case 'replace': {
           const result = executeReplaceCommand(fullText, command.target!, command.replacement!);
           if (result) {
@@ -241,6 +334,17 @@ export const VoiceCommandRecorder = ({
     }
   };
 
+  const handleRedo = () => {
+    if (onRedo) {
+      const nextText = onRedo();
+      if (nextText !== null) {
+        onEditComplete(nextText);
+        toast.success('Redone');
+        setLastAction('Redid last change');
+      }
+    }
+  };
+
   if (modelStatus === 'loading') {
     return (
       <div className="p-3 rounded-lg bg-card border border-border">
@@ -294,8 +398,21 @@ export const VoiceCommandRecorder = ({
             disabled={isRecording || isProcessing}
             variant="outline"
             className="py-6 px-4 rounded-full"
+            title="Undo"
           >
             <Undo2 className="h-5 w-5" />
+          </Button>
+        )}
+        
+        {canRedo && (
+          <Button
+            onClick={handleRedo}
+            disabled={isRecording || isProcessing}
+            variant="outline"
+            className="py-6 px-4 rounded-full"
+            title="Redo"
+          >
+            <Redo2 className="h-5 w-5" />
           </Button>
         )}
       </div>
@@ -320,8 +437,8 @@ export const VoiceCommandRecorder = ({
           <ul className="text-xs text-muted-foreground space-y-0.5">
             <li>• "Replace hello with goodbye"</li>
             <li>• "Delete the word example"</li>
-            <li>• "Insert new text after hello"</li>
-            <li>• "Undo"</li>
+            <li>• "Capitalize that" / "Undo" / "Redo"</li>
+            <li>• "Read back" / "Word count"</li>
           </ul>
         </div>
       )}

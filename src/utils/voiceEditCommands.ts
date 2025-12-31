@@ -1,10 +1,11 @@
 // Voice edit command parser for natural language editing
 
 export interface EditCommand {
-  type: 'replace' | 'delete' | 'insert' | 'unknown';
+  type: 'replace' | 'delete' | 'insert' | 'capitalize' | 'scratch' | 'word-count' | 'read' | 'undo' | 'redo' | 'unknown';
   target?: string;
   replacement?: string;
   position?: string;
+  readType?: 'back' | 'all' | 'selection';
 }
 
 // Regex patterns for different replace command variations
@@ -29,8 +30,104 @@ const INSERT_PATTERNS = [
   /^add\s+(.+?)\s+before\s+(.+)$/i,
 ];
 
+const CAPITALIZE_PATTERNS = [
+  /^capitalize that$/i,
+  /^caps that$/i,
+  /^capitalize\s+(.+)$/i,
+  /^caps\s+(.+)$/i,
+];
+
+const SCRATCH_PATTERNS = [
+  /^scratch that$/i,
+  /^scratch$/i,
+];
+
+const UNDO_PATTERNS = [
+  /^undo$/i,
+  /^undo that$/i,
+  /^go back$/i,
+];
+
+const REDO_PATTERNS = [
+  /^redo$/i,
+  /^redo that$/i,
+  /^go forward$/i,
+];
+
+const WORD_COUNT_PATTERNS = [
+  /^word count$/i,
+  /^how many words$/i,
+  /^count words$/i,
+];
+
+const READ_PATTERNS = [
+  /^read back$/i,
+  /^read that$/i,
+  /^read the last sentence$/i,
+  /^read all$/i,
+  /^read everything$/i,
+  /^read document$/i,
+  /^read selection$/i,
+  /^read selected$/i,
+  /^stop reading$/i,
+  /^stop$/i,
+];
+
 export function parseEditCommand(transcription: string): EditCommand {
   const text = transcription.trim();
+  
+  // Try undo patterns first (simple commands)
+  for (const pattern of UNDO_PATTERNS) {
+    if (pattern.test(text)) {
+      return { type: 'undo' };
+    }
+  }
+  
+  // Try redo patterns
+  for (const pattern of REDO_PATTERNS) {
+    if (pattern.test(text)) {
+      return { type: 'redo' };
+    }
+  }
+  
+  // Try scratch patterns
+  for (const pattern of SCRATCH_PATTERNS) {
+    if (pattern.test(text)) {
+      return { type: 'scratch' };
+    }
+  }
+  
+  // Try word count patterns
+  for (const pattern of WORD_COUNT_PATTERNS) {
+    if (pattern.test(text)) {
+      return { type: 'word-count' };
+    }
+  }
+  
+  // Try read patterns
+  if (/^(stop reading|stop)$/i.test(text)) {
+    return { type: 'read', readType: 'back' }; // Special case: stop
+  }
+  if (/^(read back|read that|read the last sentence)$/i.test(text)) {
+    return { type: 'read', readType: 'back' };
+  }
+  if (/^(read all|read everything|read document)$/i.test(text)) {
+    return { type: 'read', readType: 'all' };
+  }
+  if (/^(read selection|read selected)$/i.test(text)) {
+    return { type: 'read', readType: 'selection' };
+  }
+  
+  // Try capitalize patterns
+  for (const pattern of CAPITALIZE_PATTERNS) {
+    const match = text.match(pattern);
+    if (match) {
+      return {
+        type: 'capitalize',
+        target: match[1]?.trim(), // undefined means "last word"
+      };
+    }
+  }
   
   // Try replace patterns
   for (const pattern of REPLACE_PATTERNS) {
@@ -183,4 +280,50 @@ export function executeInsertCommand(
     matchCount: matches.length,
     insertedIndex,
   };
+}
+
+// Execute capitalize command
+export function executeCapitalizeCommand(
+  fullText: string,
+  target?: string
+): { newText: string; word: string } | null {
+  if (target) {
+    // Capitalize specific word
+    const escapedTarget = target.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const regex = new RegExp(escapedTarget, 'gi');
+    const matches = [...fullText.matchAll(regex)];
+    
+    if (matches.length === 0) {
+      return null;
+    }
+    
+    const lastMatch = matches[matches.length - 1];
+    const matchIndex = lastMatch.index!;
+    const matchedText = lastMatch[0];
+    const capitalized = matchedText.charAt(0).toUpperCase() + matchedText.slice(1);
+    
+    const newText = 
+      fullText.slice(0, matchIndex) + 
+      capitalized + 
+      fullText.slice(matchIndex + matchedText.length);
+    
+    return { newText, word: capitalized };
+  } else {
+    // Capitalize last word
+    const words = fullText.match(/\b\w+\b/g);
+    if (!words || words.length === 0) {
+      return null;
+    }
+    
+    const lastWord = words[words.length - 1];
+    const lastIndex = fullText.lastIndexOf(lastWord);
+    const capitalized = lastWord.charAt(0).toUpperCase() + lastWord.slice(1);
+    
+    const newText = 
+      fullText.slice(0, lastIndex) + 
+      capitalized + 
+      fullText.slice(lastIndex + lastWord.length);
+    
+    return { newText, word: capitalized };
+  }
 }
