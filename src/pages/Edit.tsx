@@ -1,11 +1,13 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { Textarea } from '@/components/ui/textarea';
 import { Menu } from 'lucide-react';
 import { useLocation } from 'react-router-dom';
 import { SideMenu } from '@/components/SideMenu';
 import { BottomTabs } from '@/components/BottomTabs';
 import { VoiceEditRecorder } from '@/components/VoiceEditRecorder';
+import { VoiceCommandRecorder } from '@/components/VoiceCommandRecorder';
 import { useAuth } from '@/contexts/AuthContext';
+import { useUndoStack } from '@/hooks/useUndoStack';
 
 const Edit = () => {
   const location = useLocation();
@@ -13,14 +15,17 @@ const Edit = () => {
   const [text, setText] = useState('');
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [selectedText, setSelectedText] = useState('');
-  const [editMode, setEditMode] = useState<'delete' | 'replace' | null>(null);
+  const [editMode, setEditMode] = useState<'delete' | 'replace' | 'voice-command' | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  
+  const { pushState, undo, canUndo, reset } = useUndoStack(text);
 
   useEffect(() => {
     if (location.state?.text) {
       setText(location.state.text);
+      reset(location.state.text);
     }
-  }, [location.state]);
+  }, [location.state, reset]);
 
   const handleTextSelect = () => {
     if (textareaRef.current) {
@@ -32,11 +37,17 @@ const Edit = () => {
     }
   };
 
-  const handleEditComplete = (newText: string) => {
+  const handleEditComplete = useCallback((newText: string) => {
+    pushState(text); // Save current state before change
     setText(newText);
     setSelectedText('');
     setEditMode(null);
-  };
+  }, [text, pushState]);
+
+  const handleUndo = useCallback(() => {
+    const previousText = undo();
+    return previousText;
+  }, [undo]);
 
   // Get user's background color preference
   const backgroundColor = profile?.background_color || '#D8DDE4';
@@ -85,7 +96,22 @@ const Edit = () => {
         )}
 
         {/* Edit Mode Buttons or Active Recorder */}
-        {editMode ? (
+        {editMode === 'voice-command' ? (
+          <div className="space-y-3">
+            <VoiceCommandRecorder
+              fullText={text}
+              onEditComplete={handleEditComplete}
+              onUndo={handleUndo}
+              canUndo={canUndo}
+            />
+            <button 
+              onClick={() => setEditMode(null)}
+              className="w-full text-sm text-muted-foreground"
+            >
+              Cancel
+            </button>
+          </div>
+        ) : editMode ? (
           <div className="space-y-3">
             <VoiceEditRecorder
               mode={editMode}
@@ -101,18 +127,26 @@ const Edit = () => {
             </button>
           </div>
         ) : (
-          <div className="flex gap-4">
+          <div className="space-y-3">
+            <div className="flex gap-4">
+              <button
+                onClick={() => setEditMode('delete')}
+                className="flex-1 bg-secondary text-secondary-foreground py-4 rounded-full text-base font-medium"
+              >
+                DELETE
+              </button>
+              <button
+                onClick={() => setEditMode('replace')}
+                className="flex-1 bg-primary text-primary-foreground py-4 rounded-full text-base font-medium"
+              >
+                REPLACE
+              </button>
+            </div>
             <button
-              onClick={() => setEditMode('delete')}
-              className="flex-1 bg-secondary text-secondary-foreground py-4 rounded-full text-base font-medium"
+              onClick={() => setEditMode('voice-command')}
+              className="w-full bg-accent text-accent-foreground py-4 rounded-full text-base font-medium"
             >
-              DELETE
-            </button>
-            <button
-              onClick={() => setEditMode('replace')}
-              className="flex-1 bg-primary text-primary-foreground py-4 rounded-full text-base font-medium"
-            >
-              REPLACE
+              VOICE COMMAND
             </button>
           </div>
         )}
