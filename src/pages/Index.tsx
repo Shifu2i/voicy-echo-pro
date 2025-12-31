@@ -23,9 +23,9 @@ const Index = () => {
     setText((prev) => (prev ? `${prev} ${transcribedText}` : transcribedText));
   };
 
-  // Get user's color preferences
-  const backgroundColor = profile?.background_color || '#D8DDE4';
-  const writingColor = profile?.writing_color || '#000000';
+  // Get user's color preferences (profile overrides localStorage)
+  const backgroundColor = profile?.background_color || localStorage.getItem('backgroundColor') || '#D8DDE4';
+  const writingColor = profile?.writing_color || localStorage.getItem('writingColor') || '#000000';
   const isPaidUser = profile?.subscription_plan === 'paid';
 
   return (
@@ -50,7 +50,7 @@ const Index = () => {
         {/* Text Area */}
         <div 
           className="rounded-3xl p-1"
-          style={{ backgroundColor: isPaidUser ? backgroundColor : '#D8DDE4' }}
+          style={{ backgroundColor }}
         >
           <Textarea
             value={text}
@@ -59,7 +59,7 @@ const Index = () => {
             className="min-h-[300px] text-base resize-none border-0 bg-transparent focus-visible:ring-0 rounded-3xl p-4"
             style={{ 
               backgroundColor: 'transparent',
-              color: isPaidUser ? writingColor : '#000000'
+              color: writingColor
             }}
           />
         </div>
