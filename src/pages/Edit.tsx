@@ -16,9 +16,10 @@ const Edit = () => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [selectedText, setSelectedText] = useState('');
   const [editMode, setEditMode] = useState<'delete' | 'replace' | 'voice-command' | null>(null);
+  const [lastUtterance, setLastUtterance] = useState('');
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   
-  const { pushState, undo, canUndo, reset } = useUndoStack(text);
+  const { pushState, undo, redo, canUndo, canRedo, reset } = useUndoStack(text);
 
   useEffect(() => {
     if (location.state?.text) {
@@ -39,6 +40,13 @@ const Edit = () => {
 
   const handleEditComplete = useCallback((newText: string) => {
     pushState(text); // Save current state before change
+    // Track the added text for "scratch that"
+    if (newText.length > text.length) {
+      const addedText = newText.slice(text.length).trim();
+      if (addedText) {
+        setLastUtterance(addedText);
+      }
+    }
     setText(newText);
     setSelectedText('');
     setEditMode(null);
@@ -48,6 +56,11 @@ const Edit = () => {
     const previousText = undo();
     return previousText;
   }, [undo]);
+
+  const handleRedo = useCallback(() => {
+    const nextText = redo();
+    return nextText;
+  }, [redo]);
 
   // Get user's background color preference
   const backgroundColor = profile?.background_color || '#D8DDE4';
@@ -102,7 +115,11 @@ const Edit = () => {
               fullText={text}
               onEditComplete={handleEditComplete}
               onUndo={handleUndo}
+              onRedo={handleRedo}
               canUndo={canUndo}
+              canRedo={canRedo}
+              selectedText={selectedText}
+              lastUtterance={lastUtterance}
             />
             <button 
               onClick={() => setEditMode(null)}

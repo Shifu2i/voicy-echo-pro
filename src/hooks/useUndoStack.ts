@@ -48,6 +48,11 @@ export function useUndoStack(initialValue: string = '') {
     setCurrentIndex(0);
   }, []);
 
+  // Get the current text without modifying state (for scratch that)
+  const getCurrentText = useCallback(() => {
+    return history[currentIndex];
+  }, [history, currentIndex]);
+
   return {
     currentValue,
     pushState,
@@ -56,5 +61,6 @@ export function useUndoStack(initialValue: string = '') {
     canUndo,
     canRedo,
     reset,
+    getCurrentText,
   };
 }
