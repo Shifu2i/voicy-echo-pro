@@ -1,6 +1,6 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
-import { Mic, Square, Loader2, Undo2, Redo2 } from 'lucide-react';
+import { Mic, Square, Loader2, Undo2, Redo2, Volume2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { VoskRecognizer, isModelLoaded, loadModel, getSelectedMicrophoneId } from '@/services/voskRecognition';
 import { loadWhisperModel, transcribeAudio, isWhisperLoaded } from '@/services/whisperRecognition';
@@ -12,7 +12,7 @@ import {
   executeInsertCommand,
   executeCapitalizeCommand
 } from '@/utils/voiceEditCommands';
-import { speak, stopSpeaking, getLastSentence, getTextStats } from '@/utils/textToSpeech';
+import { speak, stopSpeaking, getLastSentence, getTextStats, isSpeaking, onSpeakingStateChange } from '@/utils/textToSpeech';
 import { Progress } from '@/components/ui/progress';
 import { AudioWaveform } from '@/components/AudioWaveform';
 
@@ -44,6 +44,7 @@ export const VoiceCommandRecorder = ({
   const [loadProgress, setLoadProgress] = useState(0);
   const [voskReady, setVoskReady] = useState(isModelLoaded());
   const [lastAction, setLastAction] = useState<string>('');
+  const [isSpeakingState, setIsSpeakingState] = useState(false);
   
   const [audioStream, setAudioStream] = useState<MediaStream | null>(null);
   
@@ -78,6 +79,12 @@ export const VoiceCommandRecorder = ({
     };
 
     loadModels();
+  }, []);
+
+  // Track speaking state for visual feedback
+  useEffect(() => {
+    onSpeakingStateChange(setIsSpeakingState);
+    return () => onSpeakingStateChange(null);
   }, []);
 
   const handleVoskResult = useCallback((text: string) => {
@@ -426,6 +433,17 @@ export const VoiceCommandRecorder = ({
       {/* Audio Waveform Visualizer */}
       {isRecording && (
         <AudioWaveform stream={audioStream} isActive={isRecording} />
+      )}
+
+      {/* Speaking Indicator */}
+      {isSpeakingState && (
+        <button
+          onClick={stopSpeaking}
+          className="flex items-center gap-2 p-3 rounded-lg bg-primary/10 border border-primary/20 w-full hover:bg-primary/20 transition-colors"
+        >
+          <Volume2 className="h-4 w-4 text-primary animate-pulse" />
+          <span className="text-sm text-primary">Reading aloud... (tap to stop)</span>
+        </button>
       )}
 
       {partialText && (
