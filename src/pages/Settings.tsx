@@ -148,55 +148,59 @@ const Settings = () => {
   };
 
   const handleSaveBackgroundColor = async (color: string) => {
-    if (!user) {
-      toast.error('Please sign in to save settings');
-      return;
-    }
-
     setIsSaving(true);
     setBackgroundColor(color);
     
-    try {
-      const { error } = await supabase
-        .from('user_profiles')
-        .update({ background_color: color })
-        .eq('id', user.id);
+    // Save to localStorage for all users
+    localStorage.setItem('backgroundColor', color);
+    
+    if (user) {
+      try {
+        const { error } = await supabase
+          .from('user_profiles')
+          .update({ background_color: color })
+          .eq('id', user.id);
 
-      if (error) throw error;
-      
-      await refreshProfile();
-      toast.success('Background color saved!');
-    } catch (error: any) {
-      toast.error(error.message || 'Failed to save color');
-    } finally {
-      setIsSaving(false);
+        if (error) throw error;
+        
+        await refreshProfile();
+      } catch (error: any) {
+        toast.error(error.message || 'Failed to save color');
+        setIsSaving(false);
+        return;
+      }
     }
+    
+    toast.success('Background color saved!');
+    setIsSaving(false);
   };
 
   const handleSaveWritingColor = async (color: string) => {
-    if (!user) {
-      toast.error('Please sign in to save settings');
-      return;
-    }
-
     setIsSaving(true);
     setWritingColor(color);
     
-    try {
-      const { error } = await supabase
-        .from('user_profiles')
-        .update({ writing_color: color })
-        .eq('id', user.id);
+    // Save to localStorage for all users
+    localStorage.setItem('writingColor', color);
+    
+    if (user) {
+      try {
+        const { error } = await supabase
+          .from('user_profiles')
+          .update({ writing_color: color })
+          .eq('id', user.id);
 
-      if (error) throw error;
-      
-      await refreshProfile();
-      toast.success('Text color saved!');
-    } catch (error: any) {
-      toast.error(error.message || 'Failed to save color');
-    } finally {
-      setIsSaving(false);
+        if (error) throw error;
+        
+        await refreshProfile();
+      } catch (error: any) {
+        toast.error(error.message || 'Failed to save color');
+        setIsSaving(false);
+        return;
+      }
     }
+    
+    toast.success('Text color saved!');
+    setIsSaving(false);
   };
 
   const handleMicChange = (deviceId: string) => {
@@ -389,96 +393,92 @@ const Settings = () => {
             {isMoreExpanded && (
               <div className="mt-4 pt-4 border-t border-border/50 space-y-6">
                 {/* Background Color */}
-                {user && (
-                  <div>
-                    <Label className="text-sm font-medium text-foreground">
-                      Reading Background Color
-                    </Label>
-                    <div className="grid grid-cols-4 gap-2 mt-3">
-                      {DYSLEXIA_COLORS.map((color) => (
-                        <button
-                          key={color.value}
-                          onClick={() => handleSaveBackgroundColor(color.value)}
-                          disabled={isSaving}
-                          className={`w-full aspect-square rounded-xl border-2 transition-all ${
-                            backgroundColor === color.value
-                              ? 'border-primary ring-2 ring-primary ring-offset-2'
-                              : 'border-transparent hover:border-muted-foreground/30'
-                          }`}
-                          style={{ backgroundColor: color.value }}
-                          title={color.name}
-                        />
-                      ))}
-                    </div>
-                    <div className="flex gap-2 items-center mt-3">
-                      <Input
-                        type="text"
-                        placeholder="#1E1E1E"
-                        value={customBgHex}
-                        onChange={(e) => handleBgHexInputChange(e.target.value)}
-                        className="flex-1 font-mono uppercase bg-background"
-                        maxLength={7}
+                <div>
+                  <Label className="text-sm font-medium text-foreground">
+                    Reading Background Color
+                  </Label>
+                  <div className="grid grid-cols-4 gap-2 mt-3">
+                    {DYSLEXIA_COLORS.map((color) => (
+                      <button
+                        key={color.value}
+                        onClick={() => handleSaveBackgroundColor(color.value)}
+                        disabled={isSaving}
+                        className={`w-full aspect-square rounded-xl border-2 transition-all ${
+                          backgroundColor === color.value
+                            ? 'border-primary ring-2 ring-primary ring-offset-2'
+                            : 'border-transparent hover:border-muted-foreground/30'
+                        }`}
+                        style={{ backgroundColor: color.value }}
+                        title={color.name}
                       />
-                      <Button
-                        onClick={handleSaveCustomBgColor}
-                        disabled={isSaving || !isValidHex(customBgHex)}
-                        size="sm"
-                        variant="secondary"
-                      >
-                        Set
-                      </Button>
-                    </div>
-                    {bgHexError && (
-                      <p className="text-xs text-destructive mt-1">{bgHexError}</p>
-                    )}
+                    ))}
                   </div>
-                )}
+                  <div className="flex gap-2 items-center mt-3">
+                    <Input
+                      type="text"
+                      placeholder="#1E1E1E"
+                      value={customBgHex}
+                      onChange={(e) => handleBgHexInputChange(e.target.value)}
+                      className="flex-1 font-mono uppercase bg-background"
+                      maxLength={7}
+                    />
+                    <Button
+                      onClick={handleSaveCustomBgColor}
+                      disabled={isSaving || !isValidHex(customBgHex)}
+                      size="sm"
+                      variant="secondary"
+                    >
+                      Set
+                    </Button>
+                  </div>
+                  {bgHexError && (
+                    <p className="text-xs text-destructive mt-1">{bgHexError}</p>
+                  )}
+                </div>
 
                 {/* Text Color */}
-                {user && (
-                  <div>
-                    <Label className="text-sm font-medium text-foreground">
-                      Text Color
-                    </Label>
-                    <div className="grid grid-cols-4 gap-2 mt-3">
-                      {TEXT_COLORS.map((color) => (
-                        <button
-                          key={color.value}
-                          onClick={() => handleSaveWritingColor(color.value)}
-                          disabled={isSaving}
-                          className={`w-full aspect-square rounded-xl border-2 transition-all ${
-                            writingColor === color.value
-                              ? 'border-primary ring-2 ring-primary ring-offset-2'
-                              : 'border-transparent hover:border-muted-foreground/30'
-                          }`}
-                          style={{ backgroundColor: color.value }}
-                          title={color.name}
-                        />
-                      ))}
-                    </div>
-                    <div className="flex gap-2 items-center mt-3">
-                      <Input
-                        type="text"
-                        placeholder="#333333"
-                        value={customTextHex}
-                        onChange={(e) => handleTextHexInputChange(e.target.value)}
-                        className="flex-1 font-mono uppercase bg-background"
-                        maxLength={7}
+                <div>
+                  <Label className="text-sm font-medium text-foreground">
+                    Text Color
+                  </Label>
+                  <div className="grid grid-cols-4 gap-2 mt-3">
+                    {TEXT_COLORS.map((color) => (
+                      <button
+                        key={color.value}
+                        onClick={() => handleSaveWritingColor(color.value)}
+                        disabled={isSaving}
+                        className={`w-full aspect-square rounded-xl border-2 transition-all ${
+                          writingColor === color.value
+                            ? 'border-primary ring-2 ring-primary ring-offset-2'
+                            : 'border-transparent hover:border-muted-foreground/30'
+                        }`}
+                        style={{ backgroundColor: color.value }}
+                        title={color.name}
                       />
-                      <Button
-                        onClick={handleSaveCustomTextColor}
-                        disabled={isSaving || !isValidHex(customTextHex)}
-                        size="sm"
-                        variant="secondary"
-                      >
-                        Set
-                      </Button>
-                    </div>
-                    {textHexError && (
-                      <p className="text-xs text-destructive mt-1">{textHexError}</p>
-                    )}
+                    ))}
                   </div>
-                )}
+                  <div className="flex gap-2 items-center mt-3">
+                    <Input
+                      type="text"
+                      placeholder="#333333"
+                      value={customTextHex}
+                      onChange={(e) => handleTextHexInputChange(e.target.value)}
+                      className="flex-1 font-mono uppercase bg-background"
+                      maxLength={7}
+                    />
+                    <Button
+                      onClick={handleSaveCustomTextColor}
+                      disabled={isSaving || !isValidHex(customTextHex)}
+                      size="sm"
+                      variant="secondary"
+                    >
+                      Set
+                    </Button>
+                  </div>
+                  {textHexError && (
+                    <p className="text-xs text-destructive mt-1">{textHexError}</p>
+                  )}
+                </div>
 
                 {/* Microphone Input */}
                 <div>
