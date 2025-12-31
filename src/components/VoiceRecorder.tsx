@@ -6,6 +6,7 @@ import { VoskRecognizer, isModelLoaded, loadModel, getSelectedMicrophoneId } fro
 import { loadWhisperModel, transcribeAudio, isWhisperLoaded, WhisperProgressCallback, getActiveDevice } from '@/services/whisperRecognition';
 import { processVoiceCommands } from '@/utils/voiceCommands';
 import { Progress } from '@/components/ui/progress';
+import { AudioWaveform } from '@/components/AudioWaveform';
 
 interface VoiceRecorderProps {
   onTranscription: (text: string) => void;
@@ -19,6 +20,8 @@ export const VoiceRecorder = ({ onTranscription }: VoiceRecorderProps) => {
   const [loadProgress, setLoadProgress] = useState(0);
   const [voskReady, setVoskReady] = useState(isModelLoaded());
   const [whisperDevice, setWhisperDevice] = useState<'webgpu' | 'wasm'>('webgpu');
+  
+  const [audioStream, setAudioStream] = useState<MediaStream | null>(null);
   
   const recognizerRef = useRef<VoskRecognizer | null>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
@@ -98,6 +101,8 @@ export const VoiceRecorder = ({ onTranscription }: VoiceRecorderProps) => {
 
       // Start MediaRecorder for Whisper
       const stream = await navigator.mediaDevices.getUserMedia({ audio: audioConstraints });
+      setAudioStream(stream);
+      
       const mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm' });
       mediaRecorderRef.current = mediaRecorder;
 
@@ -123,6 +128,7 @@ export const VoiceRecorder = ({ onTranscription }: VoiceRecorderProps) => {
   const stopRecording = async () => {
     setIsRecording(false);
     setIsProcessing(true);
+    setAudioStream(null);
 
     // Stop VOSK preview
     if (recognizerRef.current) {
@@ -221,6 +227,11 @@ export const VoiceRecorder = ({ onTranscription }: VoiceRecorderProps) => {
           )}
         </Button>
       </div>
+
+      {/* Audio Waveform Visualizer */}
+      {isRecording && (
+        <AudioWaveform stream={audioStream} isActive={isRecording} />
+      )}
 
       {partialText && (
         <div className="p-3 rounded-lg bg-muted/50 border border-border">
