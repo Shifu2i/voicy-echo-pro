@@ -125,6 +125,14 @@ export const VoiceCommandsGuide = () => {
             <p className="text-[10px] text-muted-foreground/70 mt-2">
               Tip: Customize voice, speed & pitch in Settings → Text-to-Speech
             </p>
+            <div className="mt-3 p-2 rounded bg-muted/50 border border-border">
+              <p className="font-medium text-foreground text-[11px] mb-1">🎧 Audio Interference Tips</p>
+              <ul className="text-[10px] space-y-0.5">
+                <li>• Use headphones with a separate mic (not built-in)</li>
+                <li>• Select your specific mic in Settings</li>
+                <li>• TTS stops automatically when you start recording</li>
+              </ul>
+            </div>
           </AccordionContent>
         </AccordionItem>
       </Accordion>

@@ -183,6 +183,7 @@ export class VoskRecognizer {
       const audioConstraints: MediaTrackConstraints = {
         echoCancellation: true,
         noiseSuppression: true,
+        autoGainControl: true,
         sampleRate: 16000
       };
 

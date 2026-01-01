@@ -97,6 +97,11 @@ export const VoiceCommandRecorder = ({
       return;
     }
 
+    // Stop TTS if currently speaking to prevent audio interference
+    if (isSpeaking()) {
+      stopSpeaking();
+    }
+
     try {
       audioChunksRef.current = [];
       setPartialText('');
@@ -105,7 +110,8 @@ export const VoiceCommandRecorder = ({
       const deviceId = getSelectedMicrophoneId();
       const audioConstraints: MediaTrackConstraints = {
         echoCancellation: true,
-        noiseSuppression: true
+        noiseSuppression: true,
+        autoGainControl: true
       };
       if (deviceId) {
         audioConstraints.deviceId = { exact: deviceId };
