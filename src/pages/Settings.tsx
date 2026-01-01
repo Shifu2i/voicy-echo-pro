@@ -357,14 +357,14 @@ const Settings = () => {
               <div>
                 <label className="text-xs text-muted-foreground">Voice</label>
                 <Select 
-                  value={ttsSettings.voiceURI} 
-                  onValueChange={(v) => handleTTSChange('voiceURI', v)}
+                  value={ttsSettings.voiceURI || "default"} 
+                  onValueChange={(v) => handleTTSChange('voiceURI', v === "default" ? "" : v)}
                 >
                   <SelectTrigger className="w-full bg-background mt-1">
                     <SelectValue placeholder="System default" />
                   </SelectTrigger>
                   <SelectContent className="bg-background border border-border z-50 max-h-60">
-                    <SelectItem value="">System default</SelectItem>
+                    <SelectItem value="default">System default</SelectItem>
                     {voices.map((voice) => (
                       <SelectItem key={voice.voiceURI} value={voice.voiceURI}>
                         {voice.name} ({voice.lang})
