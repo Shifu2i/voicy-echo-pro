@@ -43,7 +43,7 @@ export const loadWhisperModel = async (onProgress?: WhisperProgressCallback): Pr
     try {
       const pipe = await pipeline(
         'automatic-speech-recognition',
-        'onnx-community/whisper-tiny.en',
+        'onnx-community/whisper-large-v3-turbo',
         {
           device,
           progress_callback: (progressData) => {
@@ -75,7 +75,7 @@ export const loadWhisperModel = async (onProgress?: WhisperProgressCallback): Pr
 
         const pipe = await pipeline(
           'automatic-speech-recognition',
-          'onnx-community/whisper-tiny.en',
+          'onnx-community/whisper-large-v3-turbo',
           {
             device: 'wasm',
             progress_callback: (progressData) => {

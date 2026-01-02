@@ -19,7 +19,7 @@ export type ResultCallback = (text: string, isFinal: boolean) => void;
 
 const CACHE_DB_NAME = 'vosk-model-cache';
 const CACHE_STORE_NAME = 'models';
-const MODEL_KEY = 'vosk-model-small-en-us-0.15';
+const MODEL_KEY = 'vosk-model-en-us-0.22';
 
 const openDB = (): Promise<IDBDatabase> => {
   return new Promise((resolve, reject) => {

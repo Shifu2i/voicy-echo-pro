@@ -7,7 +7,7 @@ const corsHeaders = {
   'Access-Control-Expose-Headers': 'Content-Length, Content-Range',
 }
 
-const MODEL_URL = 'https://alphacephei.com/vosk/models/vosk-model-small-en-us-0.15.zip';
+const MODEL_URL = 'https://alphacephei.com/vosk/models/vosk-model-en-us-0.22.zip';
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
