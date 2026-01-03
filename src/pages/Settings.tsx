@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Menu, LogOut, Mic, Keyboard, Trash2, RefreshCw, RotateCcw, ExternalLink, Volume2, Play } from 'lucide-react';
+import { Menu, LogOut, Mic, Keyboard, Trash2, RefreshCw, RotateCcw, ExternalLink, Volume2, Play, Zap, Gauge } from 'lucide-react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { SideMenu } from '@/components/SideMenu';
 import { BottomTabs } from '@/components/BottomTabs';
@@ -15,7 +15,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { ShortcutConfig, formatShortcut, parseKeyEvent, DEFAULT_SHORTCUTS } from '@/hooks/useKeyboardShortcuts';
 import { getAvailableVoices, loadTTSSettings, saveTTSSettings, speak, TTSSettings } from '@/utils/textToSpeech';
-
+import { getModelSize, setModelSize, MODEL_CONFIGS, ModelSize } from '@/utils/modelConfig';
 // Reading background color options
 const DYSLEXIA_COLORS = [
   { name: 'Dark Teal', value: '#1E3A3A' },
@@ -420,10 +420,63 @@ const Settings = () => {
             </div>
           </div>
 
-          {/* Voice Model */}
+          {/* Voice Model Size */}
           <div className="bg-muted rounded-2xl p-4">
-            <label className="text-sm font-medium text-foreground">Voice Model</label>
-            <p className="text-xs text-muted-foreground mt-1">VOSK + Whisper (Offline)</p>
+            <Label className="text-sm font-medium text-foreground flex items-center gap-2">
+              <Gauge className="w-4 h-4" />
+              Voice Recognition Model
+            </Label>
+            <p className="text-xs text-muted-foreground mt-1 mb-3">
+              Choose between speed or accuracy. Larger models require more download time.
+            </p>
+            
+            <div className="space-y-2">
+              <button
+                onClick={() => {
+                  setModelSize('small');
+                  toast.success('Model size set to Small. Reload models to apply.');
+                }}
+                className={`w-full p-3 rounded-xl border-2 text-left transition-all ${
+                  getModelSize() === 'small' 
+                    ? 'border-primary bg-primary/10' 
+                    : 'border-transparent bg-background hover:border-muted-foreground/30'
+                }`}
+              >
+                <div className="flex items-center gap-2">
+                  <Zap className="w-4 h-4 text-yellow-500" />
+                  <span className="font-medium text-sm">Small (Fast)</span>
+                </div>
+                <p className="text-xs text-muted-foreground mt-1">
+                  {MODEL_CONFIGS.small.vosk.displayName} ({MODEL_CONFIGS.small.vosk.size}) + {MODEL_CONFIGS.small.whisper.displayName} ({MODEL_CONFIGS.small.whisper.size})
+                </p>
+                <p className="text-xs text-muted-foreground">Best for slower connections. Quick download, good accuracy.</p>
+              </button>
+              
+              <button
+                onClick={() => {
+                  setModelSize('large');
+                  toast.success('Model size set to Large. Reload models to apply.');
+                }}
+                className={`w-full p-3 rounded-xl border-2 text-left transition-all ${
+                  getModelSize() === 'large' 
+                    ? 'border-primary bg-primary/10' 
+                    : 'border-transparent bg-background hover:border-muted-foreground/30'
+                }`}
+              >
+                <div className="flex items-center gap-2">
+                  <Gauge className="w-4 h-4 text-green-500" />
+                  <span className="font-medium text-sm">Large (Accurate)</span>
+                </div>
+                <p className="text-xs text-muted-foreground mt-1">
+                  {MODEL_CONFIGS.large.vosk.displayName} ({MODEL_CONFIGS.large.vosk.size}) + {MODEL_CONFIGS.large.whisper.displayName} ({MODEL_CONFIGS.large.whisper.size})
+                </p>
+                <p className="text-xs text-muted-foreground">Best accuracy. Requires ~3GB download on first use.</p>
+              </button>
+            </div>
+            
+            <p className="text-xs text-muted-foreground mt-3 italic">
+              Changes take effect after reloading the app or clearing model cache.
+            </p>
           </div>
 
           {/* Keyboard Shortcuts */}

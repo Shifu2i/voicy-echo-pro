@@ -1,9 +1,11 @@
 import { pipeline, AutomaticSpeechRecognitionPipeline } from '@huggingface/transformers';
+import { getModelConfig, getModelSize, ModelSize } from '@/utils/modelConfig';
 
 let transcriber: AutomaticSpeechRecognitionPipeline | null = null;
 let whisperLoading = false;
 let whisperLoadPromise: Promise<AutomaticSpeechRecognitionPipeline> | null = null;
 let activeDevice: 'webgpu' | 'wasm' = 'webgpu';
+let loadedModelSize: ModelSize | null = null;
 
 export interface WhisperProgress {
   status: 'downloading' | 'loading' | 'ready';
@@ -26,24 +28,45 @@ export const checkWebGPUSupport = async (): Promise<boolean> => {
   }
 };
 
+// Check if model needs reload due to size change
+export const whisperNeedsReload = (): boolean => {
+  return loadedModelSize !== null && loadedModelSize !== getModelSize();
+};
+
+// Clear loaded model to force reload
+export const clearWhisperModel = (): void => {
+  transcriber = null;
+  whisperLoadPromise = null;
+  loadedModelSize = null;
+};
+
 export const loadWhisperModel = async (onProgress?: WhisperProgressCallback): Promise<AutomaticSpeechRecognitionPipeline> => {
+  const currentSize = getModelSize();
+  
+  // If model size changed, clear the old model
+  if (loadedModelSize !== null && loadedModelSize !== currentSize) {
+    clearWhisperModel();
+  }
+  
   if (transcriber) return transcriber;
   if (whisperLoadPromise) return whisperLoadPromise;
 
   whisperLoading = true;
+  const config = getModelConfig();
+  const modelId = config.whisper.modelId;
 
   whisperLoadPromise = (async () => {
     const hasWebGPU = await checkWebGPUSupport();
     const device = hasWebGPU ? 'webgpu' : 'wasm';
     activeDevice = device;
 
-    console.log(`[Whisper] Loading with device: ${device}`);
+    console.log(`[Whisper] Loading ${modelId} with device: ${device}`);
     if (onProgress) onProgress({ status: 'downloading', progress: 0, device });
 
     try {
       const pipe = await pipeline(
         'automatic-speech-recognition',
-        'onnx-community/whisper-large-v3-turbo',
+        modelId,
         {
           device,
           progress_callback: (progressData) => {
@@ -75,7 +98,7 @@ export const loadWhisperModel = async (onProgress?: WhisperProgressCallback): Pr
 
         const pipe = await pipeline(
           'automatic-speech-recognition',
-          'onnx-community/whisper-large-v3-turbo',
+          modelId,
           {
             device: 'wasm',
             progress_callback: (progressData) => {
@@ -104,6 +127,7 @@ export const loadWhisperModel = async (onProgress?: WhisperProgressCallback): Pr
 
   try {
     transcriber = await whisperLoadPromise;
+    loadedModelSize = currentSize;
     whisperLoading = false;
     return transcriber;
   } catch (error) {
