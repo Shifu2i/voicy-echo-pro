@@ -7,7 +7,13 @@ const corsHeaders = {
   'Access-Control-Expose-Headers': 'Content-Length, Content-Range',
 }
 
-const MODEL_URL = 'https://alphacephei.com/vosk/models/vosk-model-en-us-0.22.zip';
+const MODEL_BASE_URL = 'https://alphacephei.com/vosk/models/';
+
+// Supported models
+const ALLOWED_MODELS = [
+  'vosk-model-small-en-us-0.15.zip',
+  'vosk-model-en-us-0.22.zip',
+];
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -15,6 +21,23 @@ serve(async (req) => {
   }
 
   try {
+    const url = new URL(req.url);
+    const modelParam = url.searchParams.get('model');
+    
+    // Default to large model if not specified
+    const modelFile = modelParam || 'vosk-model-en-us-0.22.zip';
+    
+    // Validate model is in allowed list
+    if (!ALLOWED_MODELS.includes(modelFile)) {
+      return new Response(
+        JSON.stringify({ error: 'Invalid model specified' }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+    
+    const modelUrl = `${MODEL_BASE_URL}${modelFile}`;
+    console.log(`Proxying model: ${modelUrl}`);
+
     // Forward range header for resumable downloads
     const rangeHeader = req.headers.get('range');
     const fetchHeaders: HeadersInit = {};
@@ -22,7 +45,7 @@ serve(async (req) => {
       fetchHeaders['Range'] = rangeHeader;
     }
 
-    const response = await fetch(MODEL_URL, {
+    const response = await fetch(modelUrl, {
       headers: fetchHeaders,
     });
 

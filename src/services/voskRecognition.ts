@@ -1,12 +1,13 @@
 import { createModel, KaldiRecognizer, Model } from 'vosk-browser';
+import { getModelConfig, getModelSize, ModelSize } from '@/utils/modelConfig';
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
 const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
-const MODEL_URL = `${SUPABASE_URL}/functions/v1/proxy-model`;
 
 let model: Model | null = null;
 let isModelLoading = false;
 let modelLoadPromise: Promise<Model> | null = null;
+let loadedModelSize: ModelSize | null = null;
 
 export interface VoskProgress {
   loaded: number;
@@ -19,7 +20,6 @@ export type ResultCallback = (text: string, isFinal: boolean) => void;
 
 const CACHE_DB_NAME = 'vosk-model-cache';
 const CACHE_STORE_NAME = 'models';
-const MODEL_KEY = 'vosk-model-en-us-0.22';
 
 const openDB = (): Promise<IDBDatabase> => {
   return new Promise((resolve, reject) => {
@@ -35,13 +35,13 @@ const openDB = (): Promise<IDBDatabase> => {
   });
 };
 
-const getCachedModel = async (): Promise<ArrayBuffer | null> => {
+const getCachedModel = async (modelKey: string): Promise<ArrayBuffer | null> => {
   try {
     const db = await openDB();
     return new Promise((resolve) => {
       const transaction = db.transaction(CACHE_STORE_NAME, 'readonly');
       const store = transaction.objectStore(CACHE_STORE_NAME);
-      const request = store.get(MODEL_KEY);
+      const request = store.get(modelKey);
       request.onerror = () => resolve(null);
       request.onsuccess = () => resolve(request.result || null);
     });
@@ -50,19 +50,21 @@ const getCachedModel = async (): Promise<ArrayBuffer | null> => {
   }
 };
 
-const cacheModel = async (data: ArrayBuffer): Promise<void> => {
+const cacheModel = async (modelKey: string, data: ArrayBuffer): Promise<void> => {
   try {
     const db = await openDB();
     const transaction = db.transaction(CACHE_STORE_NAME, 'readwrite');
     const store = transaction.objectStore(CACHE_STORE_NAME);
-    store.put(data, MODEL_KEY);
+    store.put(data, modelKey);
   } catch {
     console.warn('Failed to cache model');
   }
 };
 
-const fetchModelWithAuth = async (onProgress?: ProgressCallback): Promise<ArrayBuffer> => {
-  const response = await fetch(MODEL_URL, {
+const fetchModelWithAuth = async (modelUrl: string, onProgress?: ProgressCallback): Promise<ArrayBuffer> => {
+  const proxyUrl = `${SUPABASE_URL}/functions/v1/proxy-model?model=${encodeURIComponent(modelUrl)}`;
+  
+  const response = await fetch(proxyUrl, {
     headers: {
       'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
       'apikey': SUPABASE_ANON_KEY,
@@ -98,21 +100,47 @@ const fetchModelWithAuth = async (onProgress?: ProgressCallback): Promise<ArrayB
   return result.buffer;
 };
 
+// Check if model needs reload due to size change
+export const voskNeedsReload = (): boolean => {
+  return loadedModelSize !== null && loadedModelSize !== getModelSize();
+};
+
+// Clear loaded model to force reload
+export const clearVoskModel = (): void => {
+  model = null;
+  modelLoadPromise = null;
+  loadedModelSize = null;
+};
+
 export const loadModel = async (onProgress?: ProgressCallback): Promise<Model> => {
+  const currentSize = getModelSize();
+  
+  // If model size changed, clear the old model
+  if (loadedModelSize !== null && loadedModelSize !== currentSize) {
+    clearVoskModel();
+  }
+  
   if (model) return model;
   if (modelLoadPromise) return modelLoadPromise;
 
   isModelLoading = true;
+  const config = getModelConfig();
+  const modelKey = config.vosk.modelKey;
+  const modelUrl = config.vosk.modelUrl;
+  
+  console.log(`[VOSK] Loading model: ${modelKey}`);
   
   modelLoadPromise = (async () => {
     // Check cache first
-    let modelData = await getCachedModel();
+    let modelData = await getCachedModel(modelKey);
     
     if (modelData) {
+      console.log(`[VOSK] Found cached model: ${modelKey}`);
       if (onProgress) onProgress({ loaded: 100, total: 100, percent: 100 });
     } else {
-      modelData = await fetchModelWithAuth(onProgress);
-      await cacheModel(modelData);
+      console.log(`[VOSK] Downloading model: ${modelKey}`);
+      modelData = await fetchModelWithAuth(modelUrl, onProgress);
+      await cacheModel(modelKey, modelData);
     }
     
     const blob = new Blob([modelData], { type: 'application/zip' });
@@ -124,6 +152,7 @@ export const loadModel = async (onProgress?: ProgressCallback): Promise<Model> =
 
   try {
     model = await modelLoadPromise;
+    loadedModelSize = currentSize;
     isModelLoading = false;
     if (onProgress) {
       onProgress({ loaded: 100, total: 100, percent: 100 });
