@@ -5,7 +5,7 @@
   "identifier": "com.voicedictation.widget",
   "build": {
     "beforeDevCommand": "npm run dev",
-    "devUrl": "http://localhost:5173",
+    "devUrl": "http://localhost:8080",
     "beforeBuildCommand": "npm run build",
     "frontendDist": "../dist"
   },
@@ -50,7 +50,7 @@
       "icons/icon.ico"
     ],
     "macOS": {
-      "entitlements": null,
+      "entitlements": "entitlements.mac.plist",
       "exceptionDomain": "",
       "frameworks": [],
       "providerShortName": null,

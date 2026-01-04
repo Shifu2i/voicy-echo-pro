@@ -40,6 +40,7 @@ fn main() {
         .invoke_handler(tauri::generate_handler![
             commands::type_text,
             commands::type_text_with_delay,
+            commands::type_to_previous_app,
             commands::paste_text,
             commands::copy_to_clipboard,
             commands::read_clipboard,
@@ -47,6 +48,7 @@ fn main() {
             commands::close_window,
             commands::set_always_on_top,
             commands::get_always_on_top,
+            commands::check_accessibility_permission,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
