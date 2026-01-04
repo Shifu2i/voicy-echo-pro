@@ -12,29 +12,58 @@ import { useKeyboardShortcuts, formatShortcut } from '@/hooks/useKeyboardShortcu
 import { ShortcutSettings } from './ShortcutSettings';
 import { processVoiceCommands } from '@/utils/voiceCommands';
 
-// Type declarations for Electron API
-declare global {
-  interface Window {
-    electronAPI?: {
-      isElectron: boolean;
-      platform: string;
-      typeText: (text: string) => Promise<{ success: boolean; method?: string; error?: string; message?: string }>;
-      typeTextWithDelay: (text: string, delayMs?: number) => Promise<{ success: boolean; method?: string; error?: string }>;
-      pasteText: (text: string) => Promise<{ success: boolean; method?: string; error?: string; message?: string }>;
-      copyToClipboard: (text: string) => { success: boolean };
-      minimizeWindow: () => void;
-      closeWindow: () => void;
-      setAlwaysOnTop: (value: boolean) => void;
-      getAlwaysOnTop: () => Promise<boolean>;
-      onToggleDictation: (callback: () => void) => () => void;
-      onStopDictation: (callback: () => void) => () => void;
-    };
-  }
+// Type result from Tauri commands
+interface TypeResult {
+  success: boolean;
+  method?: string;
+  error?: string;
+  message?: string;
 }
+
+// Check if running in Tauri
+const isTauri = '__TAURI__' in window;
+
+// Tauri API wrapper
+const getTauriAPI = async () => {
+  if (!isTauri) return null;
+  
+  const { invoke } = await import('@tauri-apps/api/core');
+  const { listen } = await import('@tauri-apps/api/event');
+  const { getCurrentWindow } = await import('@tauri-apps/api/window');
+  
+  return {
+    isTauri: true,
+    platform: navigator.platform,
+    
+    typeText: (text: string) => invoke<TypeResult>('type_text', { text }),
+    typeTextWithDelay: (text: string, delayMs = 20) => 
+      invoke<TypeResult>('type_text_with_delay', { text, delayMs }),
+    pasteText: (text: string) => invoke<TypeResult>('paste_text', { text }),
+    copyToClipboard: async (text: string) => {
+      await invoke<TypeResult>('copy_to_clipboard', { text });
+      return { success: true };
+    },
+    readClipboard: () => invoke<string>('read_clipboard'),
+    
+    minimizeWindow: () => invoke('minimize_window'),
+    closeWindow: () => invoke('close_window'),
+    setAlwaysOnTop: (value: boolean) => invoke('set_always_on_top', { value }),
+    getAlwaysOnTop: () => invoke<boolean>('get_always_on_top'),
+    
+    onToggleDictation: (callback: () => void) => {
+      const unlisten = listen('toggle-dictation', () => callback());
+      return () => { unlisten.then(fn => fn()); };
+    },
+    onStopDictation: (callback: () => void) => {
+      const unlisten = listen('stop-dictation', () => callback());
+      return () => { unlisten.then(fn => fn()); };
+    },
+  };
+};
 
 export const WidgetView = () => {
   const navigate = useNavigate();
-  const isElectron = !!window.electronAPI;
+  const isDesktopApp = isTauri;
   
   const [isRecording, setIsRecording] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
@@ -54,6 +83,9 @@ export const WidgetView = () => {
     return saved !== null ? saved === 'true' : true;
   });
   
+  // Tauri API ref
+  const tauriAPIRef = useRef<Awaited<ReturnType<typeof getTauriAPI>>>(null);
+  
   // Drag state
   const [position, setPosition] = useState(() => {
     const saved = localStorage.getItem('widget-position');
@@ -61,6 +93,13 @@ export const WidgetView = () => {
   });
   const [isDragging, setIsDragging] = useState(false);
   const dragStartRef = useRef({ x: 0, y: 0, posX: 0, posY: 0 });
+  
+  // Initialize Tauri API
+  useEffect(() => {
+    getTauriAPI().then(api => {
+      tauriAPIRef.current = api;
+    });
+  }, []);
   
   // Save auto-type preference
   useEffect(() => {
@@ -115,8 +154,9 @@ export const WidgetView = () => {
   const typeToActiveApp = useCallback(async (text: string) => {
     if (!text.trim()) return;
 
-    if (window.electronAPI) {
-      const result = await window.electronAPI.typeText(text);
+    const api = tauriAPIRef.current;
+    if (api) {
+      const result = await api.typeText(text);
       
       if (result.success) {
         if (result.method === 'clipboard-only') {
@@ -235,12 +275,13 @@ export const WidgetView = () => {
     toast.success('Cleared');
   }, []);
 
-  const handleReplace = useCallback(() => {
+  const handleReplace = useCallback(async () => {
     if (lastTranscription) {
-      if (window.electronAPI) {
-        window.electronAPI.copyToClipboard(lastTranscription);
+      const api = tauriAPIRef.current;
+      if (api) {
+        await api.copyToClipboard(lastTranscription);
       } else {
-        navigator.clipboard.writeText(lastTranscription);
+        await navigator.clipboard.writeText(lastTranscription);
       }
       toast.success('Copied - paste to replace');
     }
@@ -250,8 +291,9 @@ export const WidgetView = () => {
   const handleSendToApp = useCallback(async () => {
     if (!lastTranscription.trim()) return;
     
-    if (window.electronAPI) {
-      const result = await window.electronAPI.typeText(lastTranscription);
+    const api = tauriAPIRef.current;
+    if (api) {
+      const result = await api.typeText(lastTranscription);
       if (result.success) {
         toast.success('Sent to active app');
       } else {
@@ -267,8 +309,9 @@ export const WidgetView = () => {
   const handleCopyToClipboard = useCallback(async () => {
     if (!lastTranscription.trim()) return;
     
-    if (window.electronAPI) {
-      window.electronAPI.copyToClipboard(lastTranscription);
+    const api = tauriAPIRef.current;
+    if (api) {
+      await api.copyToClipboard(lastTranscription);
     } else {
       await navigator.clipboard.writeText(lastTranscription);
     }
@@ -288,18 +331,25 @@ export const WidgetView = () => {
     modelStatus === 'ready' && !isProcessing
   );
 
-  // Listen for global hotkey events from main process
+  // Listen for global hotkey events from Tauri
   useEffect(() => {
-    if (!window.electronAPI) return;
+    if (!isTauri) return;
 
-    const unsubscribeToggle = window.electronAPI.onToggleDictation(toggleRecording);
-    const unsubscribeStop = window.electronAPI.onStopDictation(() => {
-      if (isRecording) stopRecording();
+    let unsubscribeToggle: (() => void) | undefined;
+    let unsubscribeStop: (() => void) | undefined;
+
+    getTauriAPI().then(api => {
+      if (api) {
+        unsubscribeToggle = api.onToggleDictation(toggleRecording);
+        unsubscribeStop = api.onStopDictation(() => {
+          if (isRecording) stopRecording();
+        });
+      }
     });
 
     return () => {
-      unsubscribeToggle();
-      unsubscribeStop();
+      unsubscribeToggle?.();
+      unsubscribeStop?.();
     };
   }, [toggleRecording, isRecording]);
 
@@ -338,6 +388,16 @@ export const WidgetView = () => {
       window.removeEventListener('mouseup', handleMouseUp);
     };
   }, [isDragging, position]);
+
+  // Handle close window
+  const handleCloseWindow = useCallback(async () => {
+    const api = tauriAPIRef.current;
+    if (api) {
+      await api.closeWindow();
+    } else {
+      handleBack();
+    }
+  }, [handleBack]);
 
   // Compact floating mode - just 3 buttons + settings
   if (!isExpanded && !isRecording && modelStatus === 'ready') {
@@ -392,14 +452,14 @@ export const WidgetView = () => {
             variant="ghost"
             size="icon"
             className="h-10 w-10 rounded-full hover:bg-accent hover:text-accent-foreground transition-colors"
-            title={isElectron ? "Send to active app" : "Copy to clipboard"}
+            title={isDesktopApp ? "Send to active app" : "Copy to clipboard"}
             disabled={!lastTranscription}
           >
-            {isElectron ? <Send className="h-5 w-5" /> : <Clipboard className="h-5 w-5" />}
+            {isDesktopApp ? <Send className="h-5 w-5" /> : <Clipboard className="h-5 w-5" />}
           </Button>
 
-          {/* Auto-type indicator (Electron only) */}
-          {isElectron && (
+          {/* Auto-type indicator (Desktop only) */}
+          {isDesktopApp && (
             <Button
               onClick={(e) => { e.stopPropagation(); setAutoTypeEnabled(!autoTypeEnabled); }}
               variant="ghost"
@@ -482,7 +542,7 @@ export const WidgetView = () => {
             variant="ghost"
             size="icon"
             className="h-5 w-5 hover:bg-destructive/20 hover:text-destructive"
-            onClick={isElectron ? () => window.electronAPI?.closeWindow() : handleBack}
+            onClick={handleCloseWindow}
           >
             <X className="h-3 w-3" />
           </Button>
@@ -554,8 +614,8 @@ export const WidgetView = () => {
                 </div>
               )}
 
-              {/* Auto-type toggle (Electron only) */}
-              {isElectron && !isRecording && (
+              {/* Auto-type toggle (Desktop only) */}
+              {isDesktopApp && !isRecording && (
                 <div className="flex items-center justify-between p-2 rounded-md bg-muted/20 mb-2">
                   <div className="flex items-center gap-2">
                     <Keyboard className="h-3 w-3 text-muted-foreground" />
@@ -573,7 +633,7 @@ export const WidgetView = () => {
               )}
 
               {/* Browser fallback notice */}
-              {!isElectron && !isRecording && (
+              {!isDesktopApp && !isRecording && (
                 <div className="p-2 rounded-md bg-amber-500/10 border border-amber-500/30 mb-2">
                   <p className="text-[10px] text-amber-600 dark:text-amber-400">
                     Running in browser mode. Install the desktop app to type directly into other applications.
@@ -596,7 +656,7 @@ export const WidgetView = () => {
                       >
                         <Clipboard className="h-3 w-3" />
                       </Button>
-                      {isElectron && (
+                      {isDesktopApp && (
                         <Button
                           variant="ghost"
                           size="icon"
