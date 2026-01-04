@@ -1,6 +1,11 @@
 const { app, BrowserWindow, ipcMain, globalShortcut, Tray, Menu, nativeImage } = require('electron');
 const path = require('path');
 
+// Handle Squirrel.Windows startup events (for Windows installer)
+if (require('electron-squirrel-startup')) {
+  app.quit();
+}
+
 let mainWindow = null;
 let tray = null;
 let isQuitting = false;
@@ -47,13 +52,23 @@ function createWindow() {
 
   // Load the app
   const isDev = process.env.NODE_ENV === 'development' || !app.isPackaged;
+  
   if (isDev) {
+    // Development: connect to Vite dev server
     mainWindow.loadURL('http://localhost:5173/widget');
+    // Uncomment to open DevTools in development
     // mainWindow.webContents.openDevTools({ mode: 'detach' });
   } else {
-    mainWindow.loadFile(path.join(__dirname, '../dist/index.html'), {
-      hash: '/widget'
-    });
+    // Production: Electron Forge builds renderer to .vite/renderer/main_window
+    // Use MAIN_WINDOW_VITE_DEV_SERVER_URL if available (Forge dev mode)
+    if (process.env.MAIN_WINDOW_VITE_DEV_SERVER_URL) {
+      mainWindow.loadURL(`${process.env.MAIN_WINDOW_VITE_DEV_SERVER_URL}/widget`);
+    } else {
+      // Packaged app: load from file
+      mainWindow.loadFile(path.join(__dirname, '../renderer/main_window/index.html'), {
+        hash: '/widget'
+      });
+    }
   }
 
   // Prevent window from being garbage collected
