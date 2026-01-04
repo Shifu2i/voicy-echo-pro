@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Menu, LogOut, Mic, Keyboard, Trash2, RefreshCw, RotateCcw, ExternalLink, Volume2, Play, Zap, Gauge } from 'lucide-react';
+import { Menu, LogOut, Mic, Keyboard, Trash2, RefreshCw, RotateCcw, ExternalLink, Volume2, Play, Zap, Gauge, Send, ClipboardPaste, Type, EyeOff } from 'lucide-react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { SideMenu } from '@/components/SideMenu';
 import { BottomTabs } from '@/components/BottomTabs';
@@ -16,6 +16,8 @@ import { toast } from 'sonner';
 import { ShortcutConfig, formatShortcut, parseKeyEvent, DEFAULT_SHORTCUTS } from '@/hooks/useKeyboardShortcuts';
 import { getAvailableVoices, loadTTSSettings, saveTTSSettings, speak, TTSSettings } from '@/utils/textToSpeech';
 import { getModelSize, setModelSize, MODEL_CONFIGS, ModelSize } from '@/utils/modelConfig';
+import { DictationInputSettings } from '@/components/DictationInputSettings';
+
 // Reading background color options
 const DYSLEXIA_COLORS = [
   { name: 'Dark Teal', value: '#1E3A3A' },
@@ -558,6 +560,9 @@ const Settings = () => {
               Reset to defaults
             </Button>
           </div>
+
+          {/* Dictation Input Settings (Desktop App) */}
+          <DictationInputSettings />
 
           {/* More Section */}
           <div className="bg-muted rounded-2xl p-4">

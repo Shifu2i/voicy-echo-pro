@@ -39,11 +39,14 @@ const getTauriAPI = async () => {
     typeTextWithDelay: (text: string, delayMs = 20) => 
       invoke<TypeResult>('type_text_with_delay', { text, delayMs }),
     pasteText: (text: string) => invoke<TypeResult>('paste_text', { text }),
+    typeToPreviousApp: (text: string, inputMethod: string, hideWidget: boolean, typingDelay?: number) =>
+      invoke<TypeResult>('type_to_previous_app', { text, inputMethod, hideWidget, typingDelay }),
     copyToClipboard: async (text: string) => {
       await invoke<TypeResult>('copy_to_clipboard', { text });
       return { success: true };
     },
     readClipboard: () => invoke<string>('read_clipboard'),
+    checkAccessibilityPermission: () => invoke<boolean>('check_accessibility_permission'),
     
     minimizeWindow: () => invoke('minimize_window'),
     closeWindow: () => invoke('close_window'),
@@ -150,17 +153,22 @@ export const WidgetView = () => {
     setPartialText(processed);
   }, []);
 
-  // Type text to active application
+  // Type text to active application (previous window)
   const typeToActiveApp = useCallback(async (text: string) => {
     if (!text.trim()) return;
 
     const api = tauriAPIRef.current;
     if (api) {
-      const result = await api.typeText(text);
+      // Get user preferences
+      const inputMethod = localStorage.getItem('dictation-input-method') || 'paste';
+      const hideWidget = localStorage.getItem('dictation-hide-widget') === 'true';
+      const typingDelay = parseInt(localStorage.getItem('dictation-typing-delay') || '20', 10);
+
+      const result = await api.typeToPreviousApp(text, inputMethod, hideWidget, typingDelay);
       
       if (result.success) {
-        if (result.method === 'clipboard-only') {
-          toast.info('Text copied to clipboard - press Ctrl+V to paste');
+        if (result.method === 'clipboard-paste') {
+          // Silent success for paste
         }
       } else {
         toast.error('Failed to type text: ' + result.error);
