@@ -109,42 +109,29 @@ export const loadWhisperModel = async (onProgress?: WhisperProgressCallback): Pr
       }
     };
 
+    // Start with CPU (WASM) - more stable in browser environments
+    // WebGPU can cause crashes in certain browser configurations
+    device = 'wasm';
+    activeDevice = 'wasm';
+    
+    console.log(`[Whisper] Loading ${modelId} on WASM (CPU - stable mode)`);
+    if (onProgress) onProgress({ status: 'downloading', progress: 0, device: 'wasm' });
+
     try {
-      // Try GPU first with fp16 for best performance
       const pipe = await pipeline(
         'automatic-speech-recognition',
         modelId,
         {
-          device: device,
-          dtype: device === 'webgpu' ? 'fp16' : 'q8', // fp16 for GPU, q8 quantized for CPU
+          device: 'wasm',
+          dtype: 'q8', // Quantized for faster loading and lower memory
           progress_callback: progressCallback,
         }
       );
       
-      console.log(`[Whisper] Model loaded successfully on ${device.toUpperCase()}`);
-      if (onProgress) onProgress({ status: 'ready', device });
+      console.log('[Whisper] Model loaded successfully on WASM (CPU)');
+      if (onProgress) onProgress({ status: 'ready', device: 'wasm' });
       return pipe;
     } catch (error) {
-      // If WebGPU failed, fallback to WASM
-      if (device === 'webgpu') {
-        console.warn('[Whisper] WebGPU failed, falling back to WASM (CPU):', error);
-        activeDevice = 'wasm';
-        device = 'wasm';
-        
-        const pipe = await pipeline(
-          'automatic-speech-recognition',
-          modelId,
-          {
-            device: 'wasm',
-            dtype: 'q8',
-            progress_callback: progressCallback,
-          }
-        );
-        
-        console.log('[Whisper] Model loaded successfully on WASM (CPU fallback)');
-        if (onProgress) onProgress({ status: 'ready', device: 'wasm' });
-        return pipe;
-      }
       console.error('[Whisper] Failed to load model:', error);
       throw error;
     }
