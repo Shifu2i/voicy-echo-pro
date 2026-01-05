@@ -13,6 +13,7 @@ export interface VoskProgress {
   loaded: number;
   total: number;
   percent: number;
+  estimatedTimeRemaining?: number; // seconds
 }
 
 export type ProgressCallback = (progress: VoskProgress) => void;
@@ -94,6 +95,7 @@ const fetchModelWithAuth = async (modelUrl: string, onProgress?: ProgressCallbac
   const chunks: Uint8Array[] = [];
   let loaded = 0;
   let lastProgressUpdate = 0;
+  const downloadStartTime = Date.now();
   
   while (true) {
     const { done, value } = await reader.read();
@@ -107,13 +109,20 @@ const fetchModelWithAuth = async (modelUrl: string, onProgress?: ProgressCallbac
       lastProgressUpdate = now;
       // Cap at 99% until we're actually done to avoid jumping
       const percent = Math.min(99, Math.round((loaded / total) * 100));
-      onProgress({ loaded, total, percent });
+      
+      // Calculate estimated time remaining
+      const elapsedSeconds = (now - downloadStartTime) / 1000;
+      const bytesPerSecond = loaded / elapsedSeconds;
+      const remainingBytes = total - loaded;
+      const estimatedTimeRemaining = bytesPerSecond > 0 ? Math.ceil(remainingBytes / bytesPerSecond) : undefined;
+      
+      onProgress({ loaded, total, percent, estimatedTimeRemaining });
     }
   }
   
   // Final progress update
   if (onProgress) {
-    onProgress({ loaded, total: loaded, percent: 100 });
+    onProgress({ loaded, total: loaded, percent: 100, estimatedTimeRemaining: 0 });
   }
   
   const result = new Uint8Array(loaded);
