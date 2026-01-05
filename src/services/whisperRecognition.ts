@@ -57,69 +57,99 @@ export const loadWhisperModel = async (onProgress?: WhisperProgressCallback): Pr
 
   whisperLoadPromise = (async () => {
     const hasWebGPU = await checkWebGPUSupport();
-    const device = hasWebGPU ? 'webgpu' : 'wasm';
+    let device: 'webgpu' | 'wasm' = hasWebGPU ? 'webgpu' : 'wasm';
     activeDevice = device;
 
     console.log(`[Whisper] Loading ${modelId} with device: ${device}`);
     if (onProgress) onProgress({ status: 'downloading', progress: 0, device });
 
-    try {
-      const pipe = await pipeline(
+    // Track file progress for better UX when content-length is missing
+    let fileProgress = 0;
+    let lastProgressTime = Date.now();
+
+    const createProgressCallback = (targetDevice: 'webgpu' | 'wasm') => (progressData: unknown) => {
+      if (onProgress && typeof progressData === 'object' && progressData !== null) {
+        const data = progressData as Record<string, unknown>;
+        
+        // Handle progress updates
+        if (typeof data.progress === 'number') {
+          fileProgress = Math.round(data.progress);
+          lastProgressTime = Date.now();
+        } else if (data.status === 'progress' || data.status === 'download') {
+          // Estimate progress based on time if no percentage available
+          const elapsed = Date.now() - lastProgressTime;
+          if (elapsed > 1000 && fileProgress < 95) {
+            fileProgress = Math.min(95, fileProgress + 1);
+          }
+        }
+        
+        onProgress({
+          status: 'downloading',
+          progress: fileProgress,
+          file: typeof data.file === 'string' ? data.file : undefined,
+          device: targetDevice
+        });
+      }
+    };
+
+    const loadPipeline = async (targetDevice: 'webgpu' | 'wasm'): Promise<AutomaticSpeechRecognitionPipeline> => {
+      const progressCallback = createProgressCallback(targetDevice);
+      
+      if (targetDevice === 'webgpu') {
+        // Use fp16 dtype for WebGPU to reduce memory and improve compatibility
+        const result = await pipeline(
+          'automatic-speech-recognition',
+          modelId,
+          {
+            device: 'webgpu',
+            dtype: {
+              encoder_model: 'fp16',
+              decoder_model_merged: 'fp16',
+            },
+            progress_callback: progressCallback,
+          }
+        );
+        return result;
+      }
+      
+      // WASM/CPU doesn't need dtype specification
+      const result = await pipeline(
         'automatic-speech-recognition',
         modelId,
         {
-          device,
-          progress_callback: (progressData) => {
-            if (onProgress && typeof progressData === 'object' && progressData !== null) {
-              const data = progressData as Record<string, unknown>;
-              if (typeof data.progress === 'number') {
-                onProgress({
-                  status: 'downloading',
-                  progress: Math.round(data.progress),
-                  file: typeof data.file === 'string' ? data.file : undefined,
-                  device
-                });
-              }
-            }
-          }
+          device: 'wasm',
+          progress_callback: progressCallback,
         }
       );
+      return result;
+    };
 
+    try {
+      const pipe = await loadPipeline(device);
       console.log(`[Whisper] Model loaded successfully on ${device}`);
       if (onProgress) onProgress({ status: 'ready', device });
       return pipe;
     } catch (error) {
+      console.warn(`[Whisper] ${device} failed:`, error);
+      
       // If WebGPU failed, try CPU fallback
       if (device === 'webgpu') {
-        console.warn('[Whisper] WebGPU failed, falling back to CPU:', error);
+        console.log('[Whisper] Falling back to WASM/CPU...');
         activeDevice = 'wasm';
+        device = 'wasm';
+        fileProgress = 0;
         
         if (onProgress) onProgress({ status: 'downloading', progress: 0, device: 'wasm' });
 
-        const pipe = await pipeline(
-          'automatic-speech-recognition',
-          modelId,
-          {
-            device: 'wasm',
-            progress_callback: (progressData) => {
-              if (onProgress && typeof progressData === 'object' && progressData !== null) {
-                const data = progressData as Record<string, unknown>;
-                if (typeof data.progress === 'number') {
-                  onProgress({
-                    status: 'downloading',
-                    progress: Math.round(data.progress),
-                    file: typeof data.file === 'string' ? data.file : undefined,
-                    device: 'wasm'
-                  });
-                }
-              }
-            }
-          }
-        );
-
-        console.log('[Whisper] Model loaded successfully on CPU (fallback)');
-        if (onProgress) onProgress({ status: 'ready', device: 'wasm' });
-        return pipe;
+        try {
+          const pipe = await loadPipeline('wasm');
+          console.log('[Whisper] Model loaded successfully on CPU (fallback)');
+          if (onProgress) onProgress({ status: 'ready', device: 'wasm' });
+          return pipe;
+        } catch (fallbackError) {
+          console.error('[Whisper] WASM fallback also failed:', fallbackError);
+          throw fallbackError;
+        }
       }
       throw error;
     }

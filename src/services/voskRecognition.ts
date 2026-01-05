@@ -61,6 +61,12 @@ const cacheModel = async (modelKey: string, data: ArrayBuffer): Promise<void> =>
   }
 };
 
+// Estimated sizes for models when content-length is not available
+const ESTIMATED_MODEL_SIZES: Record<string, number> = {
+  'vosk-model-small-en-us-0.15.zip': 40 * 1024 * 1024, // 40 MB
+  'vosk-model-en-us-0.22.zip': 1800 * 1024 * 1024, // 1.8 GB
+};
+
 const fetchModelWithAuth = async (modelUrl: string, onProgress?: ProgressCallback): Promise<ArrayBuffer> => {
   const proxyUrl = `${SUPABASE_URL}/functions/v1/proxy-model?model=${encodeURIComponent(modelUrl)}`;
   
@@ -74,21 +80,40 @@ const fetchModelWithAuth = async (modelUrl: string, onProgress?: ProgressCallbac
   if (!response.ok) throw new Error(`Failed to download model: ${response.status}`);
   
   const contentLength = response.headers.get('content-length');
-  const total = contentLength ? parseInt(contentLength, 10) : 0;
+  let total = contentLength ? parseInt(contentLength, 10) : 0;
+  
+  // Use estimated size if content-length is not available
+  if (total === 0) {
+    total = ESTIMATED_MODEL_SIZES[modelUrl] || 100 * 1024 * 1024; // Default 100MB estimate
+    console.log(`[VOSK] Content-length not available, using estimated size: ${Math.round(total / 1024 / 1024)}MB`);
+  }
+  
   const reader = response.body?.getReader();
   if (!reader) throw new Error('Failed to read response');
   
   const chunks: Uint8Array[] = [];
   let loaded = 0;
+  let lastProgressUpdate = 0;
   
   while (true) {
     const { done, value } = await reader.read();
     if (done) break;
     chunks.push(value);
     loaded += value.length;
-    if (onProgress && total > 0) {
-      onProgress({ loaded, total, percent: Math.round((loaded / total) * 100) });
+    
+    // Throttle progress updates to every 100ms to prevent performance issues
+    const now = Date.now();
+    if (onProgress && (now - lastProgressUpdate > 100 || done)) {
+      lastProgressUpdate = now;
+      // Cap at 99% until we're actually done to avoid jumping
+      const percent = Math.min(99, Math.round((loaded / total) * 100));
+      onProgress({ loaded, total, percent });
     }
+  }
+  
+  // Final progress update
+  if (onProgress) {
+    onProgress({ loaded, total: loaded, percent: 100 });
   }
   
   const result = new Uint8Array(loaded);
