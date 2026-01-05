@@ -27,13 +27,15 @@ export const VoiceRecorder = ({ onTranscription }: VoiceRecorderProps) => {
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
 
-  // Load Whisper (primary) and VOSK (preview) on mount
+  // Load Whisper (primary) on mount - Vosk loads lazily on first recording
   useEffect(() => {
-    const loadModels = async () => {
+    let isMounted = true;
+    
+    const loadWhisper = async () => {
       try {
-        // Load Whisper with automatic WebGPU/CPU fallback
         if (!isWhisperLoaded()) {
           const progressCallback: WhisperProgressCallback = (progress) => {
+            if (!isMounted) return;
             if (progress.progress !== undefined) {
               setLoadProgress(progress.progress);
             }
@@ -44,23 +46,25 @@ export const VoiceRecorder = ({ onTranscription }: VoiceRecorderProps) => {
           await loadWhisperModel(progressCallback);
         }
         
-        setWhisperDevice(getActiveDevice());
-        setModelStatus('ready');
-
-        // Load VOSK in background for real-time preview
-        if (!isModelLoaded()) {
-          loadModel().then(() => setVoskReady(true)).catch(console.error);
-        } else {
-          setVoskReady(true);
+        if (isMounted) {
+          setWhisperDevice(getActiveDevice());
+          setModelStatus('ready');
+          
+          // Pre-check if Vosk is already loaded (from previous session)
+          setVoskReady(isModelLoaded());
         }
       } catch (error) {
         console.error('Failed to load Whisper:', error);
-        setModelStatus('error');
-        toast.error('Failed to load voice model');
+        if (isMounted) {
+          setModelStatus('error');
+          toast.error('Failed to load voice model');
+        }
       }
     };
 
-    loadModels();
+    loadWhisper();
+    
+    return () => { isMounted = false; };
   }, []);
 
   // VOSK callback for real-time preview only
@@ -93,10 +97,22 @@ export const VoiceRecorder = ({ onTranscription }: VoiceRecorderProps) => {
         audioConstraints.deviceId = { exact: deviceId };
       }
 
+      // Load Vosk lazily for real-time preview (if not already loaded)
+      if (!voskReady && !isModelLoaded()) {
+        // Don't await - load in background
+        loadModel()
+          .then(() => setVoskReady(true))
+          .catch((err) => console.warn('Vosk preview not available:', err));
+      }
+
       // Start VOSK for real-time preview if available
-      if (voskReady) {
-        recognizerRef.current = new VoskRecognizer(handleVoskResult, deviceId);
-        await recognizerRef.current.start();
+      if (voskReady || isModelLoaded()) {
+        try {
+          recognizerRef.current = new VoskRecognizer(handleVoskResult, deviceId);
+          await recognizerRef.current.start();
+        } catch (err) {
+          console.warn('Vosk preview failed to start:', err);
+        }
       }
 
       // Start MediaRecorder for Whisper
