@@ -1,12 +1,24 @@
 import { useState, useEffect } from 'react';
 import { Progress } from '@/components/ui/progress';
-import { Download, CheckCircle, Loader2, Cpu, Zap } from 'lucide-react';
+import { Download, CheckCircle, Loader2, Cpu, Zap, Clock } from 'lucide-react';
 import { loadModel, isModelLoaded, VoskProgress } from '@/services/voskRecognition';
 import { getActiveDevice } from '@/services/whisperRecognition';
 
 interface ModelLoaderProps {
   onModelReady: () => void;
 }
+
+const formatTime = (seconds: number): string => {
+  if (seconds < 60) return `${seconds}s`;
+  const mins = Math.floor(seconds / 60);
+  const secs = seconds % 60;
+  return secs > 0 ? `${mins}m ${secs}s` : `${mins}m`;
+};
+
+const formatBytes = (bytes: number): string => {
+  if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)}KB`;
+  return `${Math.round(bytes / 1024 / 1024)}MB`;
+};
 
 export const ModelLoader = ({ onModelReady }: ModelLoaderProps) => {
   const [progress, setProgress] = useState<VoskProgress | null>(null);
@@ -68,6 +80,8 @@ export const ModelLoader = ({ onModelReady }: ModelLoaderProps) => {
     );
   }
 
+  const hasProgress = progress && progress.total && progress.total > 0;
+
   return (
     <div className="p-4 rounded-xl bg-card border border-border smooth-transition">
       <div className="flex items-center gap-3 mb-3">
@@ -86,12 +100,20 @@ export const ModelLoader = ({ onModelReady }: ModelLoaderProps) => {
         </div>
       </div>
       
-      {progress && progress.total > 0 && (
+      {hasProgress && (
         <div className="space-y-2">
           <Progress value={progress.percent} className="h-2" />
           <div className="flex justify-between text-xs text-muted-foreground">
-            <span>{Math.round(progress.loaded / 1024 / 1024)}MB / {Math.round(progress.total / 1024 / 1024)}MB</span>
-            <span>{progress.percent}%</span>
+            <span>{formatBytes(progress.loaded!)} / {formatBytes(progress.total!)}</span>
+            <div className="flex items-center gap-2">
+              {progress.estimatedTimeRemaining !== undefined && progress.estimatedTimeRemaining > 0 && (
+                <span className="flex items-center gap-1">
+                  <Clock className="h-3 w-3" />
+                  {formatTime(progress.estimatedTimeRemaining)} left
+                </span>
+              )}
+              <span>{progress.percent}%</span>
+            </div>
           </div>
         </div>
       )}

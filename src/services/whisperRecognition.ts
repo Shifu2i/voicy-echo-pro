@@ -12,6 +12,9 @@ export interface WhisperProgress {
   progress?: number;
   file?: string;
   device?: 'webgpu' | 'wasm';
+  loaded?: number;
+  total?: number;
+  estimatedTimeRemaining?: number; // seconds
 }
 
 export type WhisperProgressCallback = (progress: WhisperProgress) => void;
@@ -67,7 +70,9 @@ export const loadWhisperModel = async (onProgress?: WhisperProgressCallback): Pr
     if (onProgress) onProgress({ status: 'downloading', progress: 0, device });
 
     let fileProgress = 0;
-    let lastProgressTime = Date.now();
+    let downloadStartTime = Date.now();
+    let totalBytes = 0;
+    let loadedBytes = 0;
 
     const progressCallback = (progressData: unknown) => {
       if (onProgress && typeof progressData === 'object' && progressData !== null) {
@@ -75,11 +80,20 @@ export const loadWhisperModel = async (onProgress?: WhisperProgressCallback): Pr
         
         if (typeof data.progress === 'number') {
           fileProgress = Math.round(data.progress);
-          lastProgressTime = Date.now();
-        } else if (data.status === 'progress' || data.status === 'download') {
-          const elapsed = Date.now() - lastProgressTime;
-          if (elapsed > 1000 && fileProgress < 95) {
-            fileProgress = Math.min(95, fileProgress + 1);
+        }
+        
+        // Track bytes for time estimation
+        if (typeof data.loaded === 'number') loadedBytes = data.loaded;
+        if (typeof data.total === 'number') totalBytes = data.total;
+        
+        // Calculate estimated time remaining
+        let estimatedTimeRemaining: number | undefined;
+        if (loadedBytes > 0 && totalBytes > 0) {
+          const elapsedSeconds = (Date.now() - downloadStartTime) / 1000;
+          const bytesPerSecond = loadedBytes / elapsedSeconds;
+          const remainingBytes = totalBytes - loadedBytes;
+          if (bytesPerSecond > 0) {
+            estimatedTimeRemaining = Math.ceil(remainingBytes / bytesPerSecond);
           }
         }
         
@@ -87,7 +101,10 @@ export const loadWhisperModel = async (onProgress?: WhisperProgressCallback): Pr
           status: 'downloading',
           progress: fileProgress,
           file: typeof data.file === 'string' ? data.file : undefined,
-          device
+          device,
+          loaded: loadedBytes,
+          total: totalBytes,
+          estimatedTimeRemaining
         });
       }
     };
