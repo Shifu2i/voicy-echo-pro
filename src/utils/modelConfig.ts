@@ -13,6 +13,8 @@ export interface ModelConfig {
     modelId: string;
     displayName: string;
     size: string;
+    gpuDtype: 'fp16' | 'fp32';
+    cpuDtype: 'q8' | 'fp32';
   };
 }
 
@@ -28,6 +30,8 @@ export const MODEL_CONFIGS: Record<ModelSize, ModelConfig> = {
       modelId: 'onnx-community/whisper-tiny.en',
       displayName: 'Whisper Tiny',
       size: '~150 MB',
+      gpuDtype: 'fp16',
+      cpuDtype: 'q8',
     },
   },
   large: {
@@ -41,6 +45,8 @@ export const MODEL_CONFIGS: Record<ModelSize, ModelConfig> = {
       modelId: 'onnx-community/whisper-large-v3-turbo',
       displayName: 'Whisper Large v3 Turbo',
       size: '~1.5 GB',
+      gpuDtype: 'fp16',
+      cpuDtype: 'q8',
     },
   },
 };
