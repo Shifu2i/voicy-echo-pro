@@ -23,20 +23,21 @@ export interface ModelConfig {
   whisper: WhisperConfig;
 }
 
-// Fixed configuration: Large Whisper + Small Vosk
+// Fixed configuration: Small Vosk for real-time preview
 const VOSK_SMALL: VoskConfig = {
   modelKey: 'vosk-model-small-en-us-0.15',
-  modelUrl: 'vosk-model-small-en-us-0.15.zip',
+  modelUrl: 'https://alphacephei.com/vosk/models/vosk-model-small-en-us-0.15.zip',
   displayName: 'VOSK Small',
   size: '40 MB',
 };
 
+// Optimized Whisper: Use large-v3-turbo with q4 quantization for faster loading
 const WHISPER_LARGE: WhisperConfig = {
   modelId: 'onnx-community/whisper-large-v3-turbo',
   displayName: 'Whisper Large v3 Turbo',
-  size: '~1.5 GB',
+  size: '~400 MB',
   gpuDtype: 'fp16',
-  cpuDtype: 'q8',
+  cpuDtype: 'q8', // q8 is faster to load than fp32
 };
 
 // Legacy MODEL_CONFIGS for backward compatibility

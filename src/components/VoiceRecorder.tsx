@@ -2,7 +2,7 @@ import { useState, useRef, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
 import { Mic, Square, Loader2, Download, Clock, Check, FileDown } from 'lucide-react';
 import { toast } from 'sonner';
-import { VoskRecognizer, isModelLoaded, loadModel, getSelectedMicrophoneId } from '@/services/voskRecognition';
+import { VoskRecognizer, isModelLoaded, loadModel, getSelectedMicrophoneId, isVoskCached } from '@/services/voskRecognition';
 import { loadWhisperModel, transcribeAudio, isWhisperLoaded, WhisperProgressCallback, getActiveDevice, FileProgress } from '@/services/whisperRecognition';
 import { processVoiceCommands } from '@/utils/voiceCommands';
 import { AudioWaveform } from '@/components/AudioWaveform';
@@ -44,36 +44,52 @@ export const VoiceRecorder = ({ onTranscription }: VoiceRecorderProps) => {
     setFileProgress([]);
     
     try {
-      if (!isWhisperLoaded()) {
-        const progressCallback: WhisperProgressCallback = (progress) => {
-          if (progress.overallProgress !== undefined) {
-            setLoadProgress(progress.overallProgress);
-          }
-          if (progress.device) {
-            setWhisperDevice(progress.device);
-          }
-          if (progress.loaded !== undefined) {
-            setLoadedBytes(progress.loaded);
-          }
-          if (progress.total !== undefined) {
-            setTotalBytes(progress.total);
-          }
-          if (progress.estimatedTimeRemaining !== undefined) {
-            setTimeRemaining(progress.estimatedTimeRemaining);
-          }
-          if (progress.file) {
-            setCurrentFile(progress.file);
-          }
-          if (progress.files) {
-            setFileProgress(progress.files);
-          }
-        };
-        await loadWhisperModel(progressCallback);
-      }
+      // Load Whisper and Vosk in parallel for faster startup
+      const whisperPromise = !isWhisperLoaded() 
+        ? loadWhisperModel((progress) => {
+            if (progress.overallProgress !== undefined) {
+              setLoadProgress(progress.overallProgress);
+            }
+            if (progress.device) {
+              setWhisperDevice(progress.device);
+            }
+            if (progress.loaded !== undefined) {
+              setLoadedBytes(progress.loaded);
+            }
+            if (progress.total !== undefined) {
+              setTotalBytes(progress.total);
+            }
+            if (progress.estimatedTimeRemaining !== undefined) {
+              setTimeRemaining(progress.estimatedTimeRemaining);
+            }
+            if (progress.file) {
+              setCurrentFile(progress.file);
+            }
+            if (progress.files) {
+              setFileProgress(progress.files);
+            }
+          })
+        : Promise.resolve();
+      
+      // Start Vosk loading in background (don't block on it)
+      const voskPromise = loadModel()
+        .then(() => {
+          console.log('[VoiceRecorder] Vosk model ready');
+          setVoskReady(true);
+        })
+        .catch((err) => {
+          console.warn('[VoiceRecorder] Vosk failed to load:', err);
+        });
+      
+      // Wait for Whisper (required), Vosk loads in background
+      await whisperPromise;
       
       setWhisperDevice(getActiveDevice());
       setModelStatus('ready');
       setVoskReady(isModelLoaded());
+      
+      // Don't await Vosk - let it finish in background
+      voskPromise;
     } catch (error) {
       console.error('Failed to load Whisper:', error);
       setModelStatus('error');
