@@ -1,12 +1,13 @@
-import { useState, useRef, useCallback, useEffect } from 'react';
+import { useState, useRef, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
-import { Mic, Square, Loader2 } from 'lucide-react';
+import { Mic, Square, Loader2, Download, Clock } from 'lucide-react';
 import { toast } from 'sonner';
 import { VoskRecognizer, isModelLoaded, loadModel, getSelectedMicrophoneId } from '@/services/voskRecognition';
 import { loadWhisperModel, transcribeAudio, isWhisperLoaded, WhisperProgressCallback, getActiveDevice } from '@/services/whisperRecognition';
 import { processVoiceCommands } from '@/utils/voiceCommands';
 import { Progress } from '@/components/ui/progress';
 import { AudioWaveform } from '@/components/AudioWaveform';
+import { getModelConfig } from '@/utils/modelConfig';
 
 interface VoiceRecorderProps {
   onTranscription: (text: string) => void;
@@ -18,9 +19,12 @@ export const VoiceRecorder = ({ onTranscription }: VoiceRecorderProps) => {
   const [partialText, setPartialText] = useState('');
   const [modelStatus, setModelStatus] = useState<'idle' | 'loading' | 'ready' | 'error'>('idle');
   const [loadProgress, setLoadProgress] = useState(0);
+  const [loadedBytes, setLoadedBytes] = useState(0);
+  const [totalBytes, setTotalBytes] = useState(0);
+  const [timeRemaining, setTimeRemaining] = useState<number | undefined>();
+  const [currentFile, setCurrentFile] = useState<string>('');
   const [voskReady, setVoskReady] = useState(isModelLoaded());
   const [whisperDevice, setWhisperDevice] = useState<'webgpu' | 'wasm'>('wasm');
-  
   const [audioStream, setAudioStream] = useState<MediaStream | null>(null);
   
   const recognizerRef = useRef<VoskRecognizer | null>(null);
@@ -33,6 +37,10 @@ export const VoiceRecorder = ({ onTranscription }: VoiceRecorderProps) => {
     
     setModelStatus('loading');
     setLoadProgress(0);
+    setLoadedBytes(0);
+    setTotalBytes(0);
+    setTimeRemaining(undefined);
+    setCurrentFile('');
     
     try {
       if (!isWhisperLoaded()) {
@@ -42,6 +50,20 @@ export const VoiceRecorder = ({ onTranscription }: VoiceRecorderProps) => {
           }
           if (progress.device) {
             setWhisperDevice(progress.device);
+          }
+          if (progress.loaded !== undefined) {
+            setLoadedBytes(progress.loaded);
+          }
+          if (progress.total !== undefined) {
+            setTotalBytes(progress.total);
+          }
+          if (progress.estimatedTimeRemaining !== undefined) {
+            setTimeRemaining(progress.estimatedTimeRemaining);
+          }
+          if (progress.file) {
+            // Extract filename from path
+            const fileName = progress.file.split('/').pop() || progress.file;
+            setCurrentFile(fileName);
           }
         };
         await loadWhisperModel(progressCallback);
@@ -186,6 +208,24 @@ export const VoiceRecorder = ({ onTranscription }: VoiceRecorderProps) => {
     }
   };
 
+  // Helper functions for formatting
+  const formatBytes = (bytes: number): string => {
+    if (bytes === 0) return '0 B';
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+    if (bytes < 1024 * 1024 * 1024) return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+    return `${(bytes / 1024 / 1024 / 1024).toFixed(1)} GB`;
+  };
+
+  const formatTime = (seconds: number): string => {
+    if (seconds < 60) return `${Math.ceil(seconds)}s`;
+    const mins = Math.floor(seconds / 60);
+    const secs = Math.ceil(seconds % 60);
+    return secs > 0 ? `${mins}m ${secs}s` : `${mins}m`;
+  };
+
+  const config = getModelConfig();
+
   if (modelStatus === 'idle') {
     return (
       <div className="flex flex-col gap-4">
@@ -198,26 +238,86 @@ export const VoiceRecorder = ({ onTranscription }: VoiceRecorderProps) => {
           Tap to Enable Voice
         </Button>
         <p className="text-xs text-center text-muted-foreground">
-          Downloads ~150MB voice model (one-time)
+          Downloads {config.whisper.size} voice model (one-time)
         </p>
       </div>
     );
   }
 
   if (modelStatus === 'loading') {
+    const hasDetailedProgress = totalBytes > 0;
+    const downloadSpeed = timeRemaining && loadedBytes > 0 && totalBytes > loadedBytes
+      ? (totalBytes - loadedBytes) / timeRemaining
+      : 0;
+
     return (
-      <div className="p-4 rounded-xl bg-card border border-border">
-        <div className="flex items-center gap-3 mb-3">
-          <Loader2 className="h-5 w-5 text-primary animate-spin" />
-          <div>
-            <p className="text-sm font-medium">Loading Whisper AI...</p>
-            <p className="text-xs text-muted-foreground">
-              {whisperDevice === 'wasm' ? 'Using CPU mode' : 'One-time download for offline use'}
+      <div className="p-5 rounded-2xl bg-card border border-border space-y-4">
+        {/* Header */}
+        <div className="flex items-center gap-3">
+          <div className="relative">
+            <Download className="h-5 w-5 text-primary" />
+            <div className="absolute inset-0 h-5 w-5 text-primary animate-ping opacity-30">
+              <Download className="h-5 w-5" />
+            </div>
+          </div>
+          <div className="flex-1">
+            <p className="text-sm font-medium text-foreground">
+              Downloading {config.whisper.displayName}
             </p>
+            {currentFile && (
+              <p className="text-xs text-muted-foreground truncate max-w-[200px]">
+                {currentFile}
+              </p>
+            )}
           </div>
         </div>
-        <Progress value={loadProgress} className="h-2" />
-        <p className="text-xs text-muted-foreground mt-2 text-right">{loadProgress}%</p>
+
+        {/* Progress Bar */}
+        <div className="space-y-2">
+          <div className="relative h-3 bg-muted rounded-full overflow-hidden">
+            <div 
+              className="absolute inset-y-0 left-0 bg-primary rounded-full transition-all duration-300 ease-out"
+              style={{ width: `${loadProgress}%` }}
+            />
+            {/* Animated shimmer effect */}
+            <div 
+              className="absolute inset-y-0 left-0 bg-gradient-to-r from-transparent via-white/20 to-transparent animate-pulse"
+              style={{ width: `${loadProgress}%` }}
+            />
+          </div>
+
+          {/* Stats Row */}
+          <div className="flex items-center justify-between text-xs text-muted-foreground">
+            <div className="flex items-center gap-2">
+              {hasDetailedProgress ? (
+                <span>{formatBytes(loadedBytes)} / {formatBytes(totalBytes)}</span>
+              ) : (
+                <span>Initializing...</span>
+              )}
+            </div>
+            <div className="flex items-center gap-3">
+              {downloadSpeed > 0 && (
+                <span className="text-muted-foreground/70">
+                  {formatBytes(downloadSpeed)}/s
+                </span>
+              )}
+              {timeRemaining !== undefined && timeRemaining > 0 && (
+                <span className="flex items-center gap-1">
+                  <Clock className="h-3 w-3" />
+                  {formatTime(timeRemaining)}
+                </span>
+              )}
+              <span className="font-medium text-foreground min-w-[3ch] text-right">
+                {loadProgress}%
+              </span>
+            </div>
+          </div>
+        </div>
+
+        {/* Info */}
+        <p className="text-xs text-muted-foreground text-center">
+          One-time download • Cached for offline use
+        </p>
       </div>
     );
   }
