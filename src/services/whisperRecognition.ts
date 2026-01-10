@@ -7,14 +7,23 @@ let whisperLoadPromise: Promise<AutomaticSpeechRecognitionPipeline> | null = nul
 let activeDevice: 'webgpu' | 'wasm' = 'wasm';
 let loadedModelSize: ModelSize | null = null;
 
+export interface FileProgress {
+  name: string;
+  loaded: number;
+  total: number;
+  status: 'pending' | 'downloading' | 'done';
+}
+
 export interface WhisperProgress {
   status: 'downloading' | 'loading' | 'ready';
   progress?: number;
+  overallProgress: number; // 0-100 across all files
   file?: string;
   device?: 'webgpu' | 'wasm';
   loaded?: number;
   total?: number;
   estimatedTimeRemaining?: number; // seconds
+  files: FileProgress[];
 }
 
 export type WhisperProgressCallback = (progress: WhisperProgress) => void;
@@ -67,46 +76,98 @@ export const loadWhisperModel = async (onProgress?: WhisperProgressCallback): Pr
     activeDevice = device;
     
     console.log(`[Whisper] Loading ${modelId} on ${device.toUpperCase()}${hasWebGPU ? ' (GPU Accelerated)' : ' (CPU)'}`);
-    if (onProgress) onProgress({ status: 'downloading', progress: 0, device });
+    if (onProgress) onProgress({ status: 'downloading', progress: 0, overallProgress: 0, device, files: [] });
 
-    let fileProgress = 0;
-    let downloadStartTime = Date.now();
-    let totalBytes = 0;
-    let loadedBytes = 0;
+    const downloadStartTime = Date.now();
+    const filesMap = new Map<string, FileProgress>();
+    let totalBytesAllFiles = 0;
+    let loadedBytesAllFiles = 0;
+
+    const calculateOverallProgress = (): number => {
+      if (filesMap.size === 0) return 0;
+      let totalProgress = 0;
+      filesMap.forEach((file) => {
+        if (file.status === 'done') {
+          totalProgress += 100;
+        } else if (file.total > 0) {
+          totalProgress += (file.loaded / file.total) * 100;
+        }
+      });
+      return Math.round(totalProgress / filesMap.size);
+    };
 
     const progressCallback = (progressData: unknown) => {
-      if (onProgress && typeof progressData === 'object' && progressData !== null) {
-        const data = progressData as Record<string, unknown>;
-        
-        if (typeof data.progress === 'number') {
-          fileProgress = Math.round(data.progress);
+      if (!onProgress || typeof progressData !== 'object' || progressData === null) return;
+      
+      const data = progressData as Record<string, unknown>;
+      const status = data.status as string;
+      const fileName = typeof data.file === 'string' ? data.file.split('/').pop() || data.file : undefined;
+      
+      if (fileName) {
+        // Get or create file entry
+        if (!filesMap.has(fileName)) {
+          filesMap.set(fileName, {
+            name: fileName,
+            loaded: 0,
+            total: 0,
+            status: 'pending'
+          });
         }
         
-        // Track bytes for time estimation
-        if (typeof data.loaded === 'number') loadedBytes = data.loaded;
-        if (typeof data.total === 'number') totalBytes = data.total;
+        const fileEntry = filesMap.get(fileName)!;
         
-        // Calculate estimated time remaining
-        let estimatedTimeRemaining: number | undefined;
-        if (loadedBytes > 0 && totalBytes > 0) {
-          const elapsedSeconds = (Date.now() - downloadStartTime) / 1000;
-          const bytesPerSecond = loadedBytes / elapsedSeconds;
-          const remainingBytes = totalBytes - loadedBytes;
-          if (bytesPerSecond > 0) {
-            estimatedTimeRemaining = Math.ceil(remainingBytes / bytesPerSecond);
+        // Update based on status
+        if (status === 'initiate' || status === 'download') {
+          fileEntry.status = 'downloading';
+          if (typeof data.total === 'number') {
+            fileEntry.total = data.total;
+          }
+        } else if (status === 'progress') {
+          fileEntry.status = 'downloading';
+          if (typeof data.loaded === 'number') fileEntry.loaded = data.loaded;
+          if (typeof data.total === 'number') fileEntry.total = data.total;
+        } else if (status === 'done') {
+          fileEntry.status = 'done';
+          if (fileEntry.total > 0) {
+            fileEntry.loaded = fileEntry.total;
           }
         }
         
-        onProgress({
-          status: 'downloading',
-          progress: fileProgress,
-          file: typeof data.file === 'string' ? data.file : undefined,
-          device,
-          loaded: loadedBytes,
-          total: totalBytes,
-          estimatedTimeRemaining
-        });
+        filesMap.set(fileName, fileEntry);
       }
+      
+      // Calculate totals across all files
+      totalBytesAllFiles = 0;
+      loadedBytesAllFiles = 0;
+      filesMap.forEach((file) => {
+        totalBytesAllFiles += file.total;
+        loadedBytesAllFiles += file.loaded;
+      });
+      
+      // Calculate estimated time remaining
+      let estimatedTimeRemaining: number | undefined;
+      if (loadedBytesAllFiles > 0 && totalBytesAllFiles > 0) {
+        const elapsedSeconds = (Date.now() - downloadStartTime) / 1000;
+        const bytesPerSecond = loadedBytesAllFiles / elapsedSeconds;
+        const remainingBytes = totalBytesAllFiles - loadedBytesAllFiles;
+        if (bytesPerSecond > 0) {
+          estimatedTimeRemaining = Math.ceil(remainingBytes / bytesPerSecond);
+        }
+      }
+      
+      const overallProgress = calculateOverallProgress();
+      
+      onProgress({
+        status: 'downloading',
+        progress: typeof data.progress === 'number' ? Math.round(data.progress) : undefined,
+        overallProgress,
+        file: fileName,
+        device,
+        loaded: loadedBytesAllFiles,
+        total: totalBytesAllFiles,
+        estimatedTimeRemaining,
+        files: Array.from(filesMap.values())
+      });
     };
 
     // Start with CPU (WASM) - more stable in browser environments
@@ -115,7 +176,7 @@ export const loadWhisperModel = async (onProgress?: WhisperProgressCallback): Pr
     activeDevice = 'wasm';
     
     console.log(`[Whisper] Loading ${modelId} on WASM (CPU - stable mode)`);
-    if (onProgress) onProgress({ status: 'downloading', progress: 0, device: 'wasm' });
+    if (onProgress) onProgress({ status: 'downloading', progress: 0, overallProgress: 0, device: 'wasm', files: [] });
 
     try {
       const pipe = await pipeline(
@@ -129,7 +190,7 @@ export const loadWhisperModel = async (onProgress?: WhisperProgressCallback): Pr
       );
       
       console.log('[Whisper] Model loaded successfully on WASM (CPU)');
-      if (onProgress) onProgress({ status: 'ready', device: 'wasm' });
+      if (onProgress) onProgress({ status: 'ready', overallProgress: 100, device: 'wasm', files: Array.from(filesMap.values()) });
       return pipe;
     } catch (error) {
       console.error('[Whisper] Failed to load model:', error);
