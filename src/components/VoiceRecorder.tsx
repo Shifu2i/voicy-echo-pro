@@ -16,10 +16,10 @@ export const VoiceRecorder = ({ onTranscription }: VoiceRecorderProps) => {
   const [isRecording, setIsRecording] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [partialText, setPartialText] = useState('');
-  const [modelStatus, setModelStatus] = useState<'loading' | 'ready' | 'error'>('loading');
+  const [modelStatus, setModelStatus] = useState<'idle' | 'loading' | 'ready' | 'error'>('idle');
   const [loadProgress, setLoadProgress] = useState(0);
   const [voskReady, setVoskReady] = useState(isModelLoaded());
-  const [whisperDevice, setWhisperDevice] = useState<'webgpu' | 'wasm'>('webgpu');
+  const [whisperDevice, setWhisperDevice] = useState<'webgpu' | 'wasm'>('wasm');
   
   const [audioStream, setAudioStream] = useState<MediaStream | null>(null);
   
@@ -27,45 +27,35 @@ export const VoiceRecorder = ({ onTranscription }: VoiceRecorderProps) => {
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
 
-  // Load Whisper (primary) on mount - Vosk loads lazily on first recording
-  useEffect(() => {
-    let isMounted = true;
+  // Load model on demand (not on mount to prevent crashes)
+  const loadModels = async () => {
+    if (modelStatus === 'loading' || modelStatus === 'ready') return;
     
-    const loadWhisper = async () => {
-      try {
-        if (!isWhisperLoaded()) {
-          const progressCallback: WhisperProgressCallback = (progress) => {
-            if (!isMounted) return;
-            if (progress.progress !== undefined) {
-              setLoadProgress(progress.progress);
-            }
-            if (progress.device) {
-              setWhisperDevice(progress.device);
-            }
-          };
-          await loadWhisperModel(progressCallback);
-        }
-        
-        if (isMounted) {
-          setWhisperDevice(getActiveDevice());
-          setModelStatus('ready');
-          
-          // Pre-check if Vosk is already loaded (from previous session)
-          setVoskReady(isModelLoaded());
-        }
-      } catch (error) {
-        console.error('Failed to load Whisper:', error);
-        if (isMounted) {
-          setModelStatus('error');
-          toast.error('Failed to load voice model');
-        }
+    setModelStatus('loading');
+    setLoadProgress(0);
+    
+    try {
+      if (!isWhisperLoaded()) {
+        const progressCallback: WhisperProgressCallback = (progress) => {
+          if (progress.progress !== undefined) {
+            setLoadProgress(progress.progress);
+          }
+          if (progress.device) {
+            setWhisperDevice(progress.device);
+          }
+        };
+        await loadWhisperModel(progressCallback);
       }
-    };
-
-    loadWhisper();
-    
-    return () => { isMounted = false; };
-  }, []);
+      
+      setWhisperDevice(getActiveDevice());
+      setModelStatus('ready');
+      setVoskReady(isModelLoaded());
+    } catch (error) {
+      console.error('Failed to load Whisper:', error);
+      setModelStatus('error');
+      toast.error('Failed to load voice model');
+    }
+  };
 
   // VOSK callback for real-time preview only
   const handleVoskResult = useCallback((text: string, isFinal: boolean) => {
@@ -79,8 +69,19 @@ export const VoiceRecorder = ({ onTranscription }: VoiceRecorderProps) => {
   }, []);
 
   const startRecording = async () => {
-    if (modelStatus !== 'ready') {
+    // Load model first if not ready
+    if (modelStatus === 'idle') {
+      await loadModels();
+      return; // User needs to click again after model loads
+    }
+    
+    if (modelStatus === 'loading') {
       toast.error('Voice model is still loading');
+      return;
+    }
+    
+    if (modelStatus !== 'ready') {
+      toast.error('Voice model failed to load');
       return;
     }
 
@@ -185,6 +186,24 @@ export const VoiceRecorder = ({ onTranscription }: VoiceRecorderProps) => {
     }
   };
 
+  if (modelStatus === 'idle') {
+    return (
+      <div className="flex flex-col gap-4">
+        <Button
+          onClick={loadModels}
+          size="lg"
+          className="w-full py-6 text-base rounded-full"
+        >
+          <Mic className="mr-2 h-5 w-5" />
+          Tap to Enable Voice
+        </Button>
+        <p className="text-xs text-center text-muted-foreground">
+          Downloads ~150MB voice model (one-time)
+        </p>
+      </div>
+    );
+  }
+
   if (modelStatus === 'loading') {
     return (
       <div className="p-4 rounded-xl bg-card border border-border">
@@ -207,7 +226,14 @@ export const VoiceRecorder = ({ onTranscription }: VoiceRecorderProps) => {
     return (
       <div className="p-4 rounded-xl bg-destructive/10 border border-destructive/20">
         <p className="text-sm text-destructive">Failed to load voice model</p>
-        <p className="text-xs text-muted-foreground mt-1">Please refresh the page and try again</p>
+        <Button 
+          onClick={() => setModelStatus('idle')} 
+          variant="outline" 
+          size="sm" 
+          className="mt-2"
+        >
+          Try Again
+        </Button>
       </div>
     );
   }
