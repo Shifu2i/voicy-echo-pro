@@ -1,11 +1,10 @@
 import { useState, useRef, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
-import { Mic, Square, Loader2, Download, Clock } from 'lucide-react';
+import { Mic, Square, Loader2, Download, Clock, Check, FileDown } from 'lucide-react';
 import { toast } from 'sonner';
 import { VoskRecognizer, isModelLoaded, loadModel, getSelectedMicrophoneId } from '@/services/voskRecognition';
-import { loadWhisperModel, transcribeAudio, isWhisperLoaded, WhisperProgressCallback, getActiveDevice } from '@/services/whisperRecognition';
+import { loadWhisperModel, transcribeAudio, isWhisperLoaded, WhisperProgressCallback, getActiveDevice, FileProgress } from '@/services/whisperRecognition';
 import { processVoiceCommands } from '@/utils/voiceCommands';
-import { Progress } from '@/components/ui/progress';
 import { AudioWaveform } from '@/components/AudioWaveform';
 import { getModelConfig } from '@/utils/modelConfig';
 
@@ -23,6 +22,7 @@ export const VoiceRecorder = ({ onTranscription }: VoiceRecorderProps) => {
   const [totalBytes, setTotalBytes] = useState(0);
   const [timeRemaining, setTimeRemaining] = useState<number | undefined>();
   const [currentFile, setCurrentFile] = useState<string>('');
+  const [fileProgress, setFileProgress] = useState<FileProgress[]>([]);
   const [voskReady, setVoskReady] = useState(isModelLoaded());
   const [whisperDevice, setWhisperDevice] = useState<'webgpu' | 'wasm'>('wasm');
   const [audioStream, setAudioStream] = useState<MediaStream | null>(null);
@@ -41,12 +41,13 @@ export const VoiceRecorder = ({ onTranscription }: VoiceRecorderProps) => {
     setTotalBytes(0);
     setTimeRemaining(undefined);
     setCurrentFile('');
+    setFileProgress([]);
     
     try {
       if (!isWhisperLoaded()) {
         const progressCallback: WhisperProgressCallback = (progress) => {
-          if (progress.progress !== undefined) {
-            setLoadProgress(progress.progress);
+          if (progress.overallProgress !== undefined) {
+            setLoadProgress(progress.overallProgress);
           }
           if (progress.device) {
             setWhisperDevice(progress.device);
@@ -61,9 +62,10 @@ export const VoiceRecorder = ({ onTranscription }: VoiceRecorderProps) => {
             setTimeRemaining(progress.estimatedTimeRemaining);
           }
           if (progress.file) {
-            // Extract filename from path
-            const fileName = progress.file.split('/').pop() || progress.file;
-            setCurrentFile(fileName);
+            setCurrentFile(progress.file);
+          }
+          if (progress.files) {
+            setFileProgress(progress.files);
           }
         };
         await loadWhisperModel(progressCallback);
@@ -250,6 +252,12 @@ export const VoiceRecorder = ({ onTranscription }: VoiceRecorderProps) => {
       ? (totalBytes - loadedBytes) / timeRemaining
       : 0;
 
+    // Sort files: downloading first, then done, then pending
+    const sortedFiles = [...fileProgress].sort((a, b) => {
+      const order = { downloading: 0, pending: 1, done: 2 };
+      return order[a.status] - order[b.status];
+    });
+
     return (
       <div className="p-5 rounded-2xl bg-card border border-border space-y-4">
         {/* Header */}
@@ -264,15 +272,13 @@ export const VoiceRecorder = ({ onTranscription }: VoiceRecorderProps) => {
             <p className="text-sm font-medium text-foreground">
               Downloading {config.whisper.displayName}
             </p>
-            {currentFile && (
-              <p className="text-xs text-muted-foreground truncate max-w-[200px]">
-                {currentFile}
-              </p>
-            )}
+            <p className="text-xs text-muted-foreground">
+              One-time download • Cached for offline use
+            </p>
           </div>
         </div>
 
-        {/* Progress Bar */}
+        {/* Overall Progress Bar */}
         <div className="space-y-2">
           <div className="relative h-3 bg-muted rounded-full overflow-hidden">
             <div 
@@ -314,10 +320,73 @@ export const VoiceRecorder = ({ onTranscription }: VoiceRecorderProps) => {
           </div>
         </div>
 
-        {/* Info */}
-        <p className="text-xs text-muted-foreground text-center">
-          One-time download • Cached for offline use
-        </p>
+        {/* File Breakdown */}
+        {sortedFiles.length > 0 && (
+          <div className="space-y-2 pt-2 border-t border-border">
+            <p className="text-xs font-medium text-muted-foreground">Files</p>
+            <div className="space-y-1.5 max-h-40 overflow-y-auto">
+              {sortedFiles.map((file) => (
+                <div 
+                  key={file.name} 
+                  className={`flex items-center gap-2 text-xs p-2 rounded-lg transition-colors ${
+                    file.status === 'done' 
+                      ? 'bg-primary/10' 
+                      : file.status === 'downloading' 
+                        ? 'bg-muted' 
+                        : 'bg-muted/50'
+                  }`}
+                >
+                  {/* Status Icon */}
+                  <div className="flex-shrink-0 w-4 h-4 flex items-center justify-center">
+                    {file.status === 'done' ? (
+                      <Check className="h-3.5 w-3.5 text-primary" />
+                    ) : file.status === 'downloading' ? (
+                      <FileDown className="h-3.5 w-3.5 text-primary animate-pulse" />
+                    ) : (
+                      <div className="h-2 w-2 rounded-full bg-muted-foreground/30" />
+                    )}
+                  </div>
+                  
+                  {/* File Name */}
+                  <span className={`flex-1 truncate ${
+                    file.status === 'done' 
+                      ? 'text-primary' 
+                      : file.status === 'downloading'
+                        ? 'text-foreground'
+                        : 'text-muted-foreground'
+                  }`}>
+                    {file.name}
+                  </span>
+                  
+                  {/* Progress or Size */}
+                  <div className="flex-shrink-0 text-right min-w-[80px]">
+                    {file.status === 'done' ? (
+                      <span className="text-primary">{formatBytes(file.total)}</span>
+                    ) : file.status === 'downloading' && file.total > 0 ? (
+                      <span className="text-muted-foreground">
+                        {formatBytes(file.loaded)} / {formatBytes(file.total)}
+                      </span>
+                    ) : file.total > 0 ? (
+                      <span className="text-muted-foreground/70">{formatBytes(file.total)}</span>
+                    ) : (
+                      <span className="text-muted-foreground/50">...</span>
+                    )}
+                  </div>
+                  
+                  {/* Individual Progress Bar for downloading files */}
+                  {file.status === 'downloading' && file.total > 0 && (
+                    <div className="flex-shrink-0 w-12 h-1.5 bg-muted-foreground/20 rounded-full overflow-hidden">
+                      <div 
+                        className="h-full bg-primary rounded-full transition-all duration-300"
+                        style={{ width: `${Math.round((file.loaded / file.total) * 100)}%` }}
+                      />
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
     );
   }
