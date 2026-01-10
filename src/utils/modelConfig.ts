@@ -31,13 +31,14 @@ const VOSK_SMALL: VoskConfig = {
   size: '40 MB',
 };
 
-// Optimized Whisper: Use large-v3-turbo with q4 quantization for faster loading
+// Optimized Whisper: Use base.en - small, fast, English-optimized
+// Large models cause WASM memory issues in browser
 const WHISPER_LARGE: WhisperConfig = {
-  modelId: 'onnx-community/whisper-large-v3-turbo',
-  displayName: 'Whisper Large v3 Turbo',
-  size: '~400 MB',
-  gpuDtype: 'fp16',
-  cpuDtype: 'q8', // q8 is faster to load than fp32
+  modelId: 'onnx-community/whisper-base.en',
+  displayName: 'Whisper Base (English)',
+  size: '~150 MB',
+  gpuDtype: 'fp32',
+  cpuDtype: 'fp32', // fp32 more stable than q8 for base model
 };
 
 // Legacy MODEL_CONFIGS for backward compatibility
