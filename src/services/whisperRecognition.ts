@@ -184,7 +184,7 @@ export const loadWhisperModel = async (onProgress?: WhisperProgressCallback): Pr
         modelId,
         {
           device: 'wasm',
-          dtype: 'q8', // Quantized for faster loading and lower memory
+          dtype: config.whisper.cpuDtype as 'fp32' | 'q8', // Use config dtype
           progress_callback: progressCallback,
         }
       );
