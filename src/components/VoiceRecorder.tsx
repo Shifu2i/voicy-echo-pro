@@ -24,7 +24,7 @@ export const VoiceRecorder = ({ onTranscription }: VoiceRecorderProps) => {
   const [currentFile, setCurrentFile] = useState<string>('');
   const [fileProgress, setFileProgress] = useState<FileProgress[]>([]);
   const [voskReady, setVoskReady] = useState(isModelLoaded());
-  const [whisperDevice, setWhisperDevice] = useState<'webgpu' | 'wasm'>('wasm');
+  const [whisperDevice, setWhisperDevice] = useState<'webgpu' | 'wasm' | 'native'>('wasm');
   const [audioStream, setAudioStream] = useState<MediaStream | null>(null);
   
   const recognizerRef = useRef<VoskRecognizer | null>(null);

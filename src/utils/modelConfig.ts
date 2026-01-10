@@ -31,14 +31,15 @@ const VOSK_SMALL: VoskConfig = {
   size: '40 MB',
 };
 
-// Optimized Whisper: Use base.en - small, fast, English-optimized
-// Large models cause WASM memory issues in browser
+// Optimized Whisper: Use tiny.en - smallest, fastest, for browser compatibility
+// Larger models cause WASM memory issues in browser WebView
+// Native Tauri app can use larger models via whisper-rs
 const WHISPER_LARGE: WhisperConfig = {
-  modelId: 'onnx-community/whisper-base.en',
-  displayName: 'Whisper Base (English)',
-  size: '~150 MB',
+  modelId: 'onnx-community/whisper-tiny.en',
+  displayName: 'Whisper Tiny (English)',
+  size: '~75 MB',
   gpuDtype: 'fp32',
-  cpuDtype: 'fp32', // fp32 more stable than q8 for base model
+  cpuDtype: 'fp32', // fp32 for stability
 };
 
 // Legacy MODEL_CONFIGS for backward compatibility
