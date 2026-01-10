@@ -3,6 +3,7 @@
 mod keyboard;
 mod commands;
 mod tray;
+mod whisper;
 
 use tauri::Manager;
 use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut};
@@ -49,6 +50,15 @@ fn main() {
             commands::set_always_on_top,
             commands::get_always_on_top,
             commands::check_accessibility_permission,
+            // Native Whisper commands
+            whisper::is_whisper_model_downloaded,
+            whisper::get_whisper_model_path,
+            whisper::download_whisper_model,
+            whisper::load_whisper_model,
+            whisper::is_whisper_loaded,
+            whisper::transcribe_audio_native,
+            whisper::transcribe_audio_file,
+            whisper::unload_whisper_model,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

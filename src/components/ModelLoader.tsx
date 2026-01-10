@@ -24,7 +24,7 @@ export const ModelLoader = ({ onModelReady }: ModelLoaderProps) => {
   const [progress, setProgress] = useState<VoskProgress | null>(null);
   const [status, setStatus] = useState<'idle' | 'loading' | 'ready' | 'error'>('idle');
   const [error, setError] = useState<string | null>(null);
-  const [device, setDevice] = useState<'webgpu' | 'wasm'>('wasm');
+  const [device, setDevice] = useState<'webgpu' | 'wasm' | 'native'>('wasm');
 
   useEffect(() => {
     if (isModelLoaded()) {
@@ -52,15 +52,16 @@ export const ModelLoader = ({ onModelReady }: ModelLoaderProps) => {
 
   if (status === 'ready') {
     const isGPU = device === 'webgpu';
+    const isNative = device === 'native';
     return (
       <div className="flex items-center gap-2 text-sm text-muted-foreground">
         <CheckCircle className="h-4 w-4 text-green-500" />
         <span>Offline voice ready</span>
         <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${
-          isGPU ? 'bg-primary/10 text-primary' : 'bg-muted text-muted-foreground'
+          isNative || isGPU ? 'bg-primary/10 text-primary' : 'bg-muted text-muted-foreground'
         }`}>
-          {isGPU ? <Zap className="h-3 w-3" /> : <Cpu className="h-3 w-3" />}
-          {isGPU ? 'GPU' : 'CPU'}
+          {isNative ? <Zap className="h-3 w-3" /> : isGPU ? <Zap className="h-3 w-3" /> : <Cpu className="h-3 w-3" />}
+          {isNative ? 'Native' : isGPU ? 'GPU' : 'CPU'}
         </span>
       </div>
     );

@@ -4,8 +4,21 @@ import { getModelConfig, getModelSize, ModelSize } from '@/utils/modelConfig';
 let transcriber: AutomaticSpeechRecognitionPipeline | null = null;
 let whisperLoading = false;
 let whisperLoadPromise: Promise<AutomaticSpeechRecognitionPipeline> | null = null;
-let activeDevice: 'webgpu' | 'wasm' = 'wasm';
+let activeDevice: 'webgpu' | 'wasm' | 'native' = 'wasm';
 let loadedModelSize: ModelSize | null = null;
+let usingNative = false;
+
+// Check if running in Tauri
+const isTauri = (): boolean => {
+  return typeof window !== 'undefined' && '__TAURI__' in window;
+};
+
+// Tauri invoke helper
+const tauriInvoke = async <T>(cmd: string, args?: Record<string, unknown>): Promise<T> => {
+  if (!isTauri()) throw new Error('Not running in Tauri');
+  const { invoke } = await import('@tauri-apps/api/core');
+  return invoke<T>(cmd, args);
+};
 
 export interface FileProgress {
   name: string;
@@ -53,8 +66,18 @@ export const whisperNeedsReload = (): boolean => {
   return loadedModelSize !== null && loadedModelSize !== getModelSize();
 };
 
-// Desktop app - prioritize GPU (WebGPU) with CPU (WASM) fallback
-export const loadWhisperModel = async (onProgress?: WhisperProgressCallback): Promise<AutomaticSpeechRecognitionPipeline> => {
+// Check if native Whisper is available and loaded
+export const isNativeWhisperAvailable = async (): Promise<boolean> => {
+  if (!isTauri()) return false;
+  try {
+    return await tauriInvoke<boolean>('is_whisper_model_downloaded');
+  } catch {
+    return false;
+  }
+};
+
+// Desktop app - prioritize native Whisper, fallback to WASM
+export const loadWhisperModel = async (onProgress?: WhisperProgressCallback): Promise<AutomaticSpeechRecognitionPipeline | null> => {
   const currentSize = getModelSize();
   
   // If model size changed, clear the old model
@@ -63,7 +86,46 @@ export const loadWhisperModel = async (onProgress?: WhisperProgressCallback): Pr
   }
   
   if (transcriber) return transcriber;
+  if (usingNative) return null; // Native mode doesn't use transcriber
   if (whisperLoadPromise) return whisperLoadPromise;
+
+  // Try native Whisper first in Tauri
+  if (isTauri()) {
+    try {
+      const isDownloaded = await tauriInvoke<boolean>('is_whisper_model_downloaded');
+      
+      if (!isDownloaded) {
+        // Download native model
+        console.log('[Whisper] Downloading native model...');
+        if (onProgress) {
+          onProgress({ status: 'downloading', progress: 0, overallProgress: 0, device: 'native' as any, files: [] });
+        }
+        
+        await tauriInvoke<string>('download_whisper_model');
+      }
+      
+      // Load native model
+      console.log('[Whisper] Loading native model...');
+      if (onProgress) {
+        onProgress({ status: 'loading', progress: 50, overallProgress: 50, device: 'native' as any, files: [] });
+      }
+      
+      await tauriInvoke<void>('load_whisper_model');
+      
+      usingNative = true;
+      activeDevice = 'native' as any;
+      loadedModelSize = currentSize;
+      
+      console.log('[Whisper] Native model loaded successfully');
+      if (onProgress) {
+        onProgress({ status: 'ready', overallProgress: 100, device: 'native' as any, files: [] });
+      }
+      
+      return null; // Native mode
+    } catch (err) {
+      console.warn('[Whisper] Native loading failed, falling back to WASM:', err);
+    }
+  }
 
   whisperLoading = true;
   const config = getModelConfig();
@@ -210,15 +272,12 @@ export const loadWhisperModel = async (onProgress?: WhisperProgressCallback): Pr
   }
 };
 
-export const isWhisperLoaded = (): boolean => !!transcriber;
+export const isWhisperLoaded = (): boolean => !!transcriber || usingNative;
 export const isWhisperLoading = (): boolean => whisperLoading;
-export const getActiveDevice = (): 'webgpu' | 'wasm' => activeDevice;
+export const getActiveDevice = (): 'webgpu' | 'wasm' | 'native' => activeDevice;
+export const isUsingNative = (): boolean => usingNative;
 
 export const transcribeAudio = async (audioBlob: Blob): Promise<string> => {
-  if (!transcriber) {
-    throw new Error('Whisper model not loaded. Call loadWhisperModel() first.');
-  }
-
   // Convert blob to array buffer then to audio data
   const arrayBuffer = await audioBlob.arrayBuffer();
   
@@ -230,6 +289,24 @@ export const transcribeAudio = async (audioBlob: Blob): Promise<string> => {
   const audioData = audioBuffer.getChannelData(0);
   
   await audioContext.close();
+
+  // Use native transcription if available
+  if (usingNative && isTauri()) {
+    try {
+      // Convert Float32Array to regular array for Tauri
+      const audioArray = Array.from(audioData);
+      const result = await tauriInvoke<string>('transcribe_audio_native', { audioData: audioArray });
+      return result.trim();
+    } catch (err) {
+      console.error('[Whisper] Native transcription failed:', err);
+      throw new Error(`Native transcription failed: ${err}`);
+    }
+  }
+
+  // Use WASM transcriber
+  if (!transcriber) {
+    throw new Error('Whisper model not loaded. Call loadWhisperModel() first.');
+  }
 
   // Run transcription - no language/task for English-only models
   const result = await transcriber(audioData) as { text: string } | string;

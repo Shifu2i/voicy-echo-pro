@@ -78,7 +78,7 @@ export const WidgetView = () => {
   const [modelStatus, setModelStatus] = useState<'loading' | 'ready' | 'error'>('loading');
   const [loadProgress, setLoadProgress] = useState(0);
   const [voskReady, setVoskReady] = useState(isModelLoaded());
-  const [whisperDevice, setWhisperDevice] = useState<'webgpu' | 'wasm'>('webgpu');
+  const [whisperDevice, setWhisperDevice] = useState<'webgpu' | 'wasm' | 'native'>('webgpu');
   
   // Auto-type toggle state
   const [autoTypeEnabled, setAutoTypeEnabled] = useState(() => {
