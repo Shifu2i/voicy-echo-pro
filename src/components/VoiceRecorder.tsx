@@ -30,66 +30,43 @@ export const VoiceRecorder = ({ onTranscription }: VoiceRecorderProps) => {
   const recognizerRef = useRef<VoskRecognizer | null>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
+  const voskLoadingRef = useRef(false);
 
-  // Load model on demand (not on mount to prevent crashes)
+  // Load models on demand - optimized for speed
   const loadModels = async () => {
     if (modelStatus === 'loading' || modelStatus === 'ready') return;
     
     setModelStatus('loading');
     setLoadProgress(0);
-    setLoadedBytes(0);
-    setTotalBytes(0);
-    setTimeRemaining(undefined);
-    setCurrentFile('');
     setFileProgress([]);
     
     try {
-      // Load Whisper and Vosk in parallel for faster startup
-      const whisperPromise = !isWhisperLoaded() 
-        ? loadWhisperModel((progress) => {
-            if (progress.overallProgress !== undefined) {
-              setLoadProgress(progress.overallProgress);
-            }
-            if (progress.device) {
-              setWhisperDevice(progress.device);
-            }
-            if (progress.loaded !== undefined) {
-              setLoadedBytes(progress.loaded);
-            }
-            if (progress.total !== undefined) {
-              setTotalBytes(progress.total);
-            }
-            if (progress.estimatedTimeRemaining !== undefined) {
-              setTimeRemaining(progress.estimatedTimeRemaining);
-            }
-            if (progress.file) {
-              setCurrentFile(progress.file);
-            }
-            if (progress.files) {
-              setFileProgress(progress.files);
-            }
-          })
-        : Promise.resolve();
-      
-      // Start Vosk loading in background (don't block on it)
-      const voskPromise = loadModel()
-        .then(() => {
-          console.log('[VoiceRecorder] Vosk model ready');
-          setVoskReady(true);
-        })
-        .catch((err) => {
-          console.warn('[VoiceRecorder] Vosk failed to load:', err);
+      // Load Whisper first (required for transcription)
+      if (!isWhisperLoaded()) {
+        await loadWhisperModel((progress) => {
+          if (progress.overallProgress !== undefined) setLoadProgress(progress.overallProgress);
+          if (progress.device) setWhisperDevice(progress.device);
+          if (progress.loaded !== undefined) setLoadedBytes(progress.loaded);
+          if (progress.total !== undefined) setTotalBytes(progress.total);
+          if (progress.estimatedTimeRemaining !== undefined) setTimeRemaining(progress.estimatedTimeRemaining);
+          if (progress.file) setCurrentFile(progress.file);
+          if (progress.files) setFileProgress(progress.files);
         });
-      
-      // Wait for Whisper (required), Vosk loads in background
-      await whisperPromise;
+      }
       
       setWhisperDevice(getActiveDevice());
       setModelStatus('ready');
-      setVoskReady(isModelLoaded());
       
-      // Don't await Vosk - let it finish in background
-      voskPromise;
+      // Load Vosk in background (optional preview) - only once
+      if (!voskLoadingRef.current && !isModelLoaded()) {
+        voskLoadingRef.current = true;
+        loadModel()
+          .then(() => setVoskReady(true))
+          .catch((err) => console.warn('[VoiceRecorder] Vosk preview unavailable:', err))
+          .finally(() => { voskLoadingRef.current = false; });
+      } else {
+        setVoskReady(isModelLoaded());
+      }
     } catch (error) {
       console.error('Failed to load Whisper:', error);
       setModelStatus('error');
@@ -138,16 +115,8 @@ export const VoiceRecorder = ({ onTranscription }: VoiceRecorderProps) => {
         audioConstraints.deviceId = { exact: deviceId };
       }
 
-      // Load Vosk lazily for real-time preview (if not already loaded)
-      if (!voskReady && !isModelLoaded()) {
-        // Don't await - load in background
-        loadModel()
-          .then(() => setVoskReady(true))
-          .catch((err) => console.warn('Vosk preview not available:', err));
-      }
-
-      // Start VOSK for real-time preview if available
-      if (voskReady || isModelLoaded()) {
+      // Start VOSK for real-time preview if ready
+      if (voskReady && isModelLoaded()) {
         try {
           recognizerRef.current = new VoskRecognizer(handleVoskResult, deviceId);
           await recognizerRef.current.start();
