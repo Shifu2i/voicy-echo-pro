@@ -26,9 +26,15 @@ export interface ModelConfig {
 // Fixed configuration: Small Vosk for real-time preview
 const VOSK_SMALL: VoskConfig = {
   modelKey: 'vosk-model-small-en-us-0.15',
-  modelUrl: 'https://alphacephei.com/vosk/models/vosk-model-small-en-us-0.15.zip',
+  modelUrl: 'vosk-model-small-en-us-0.15.zip', // Just filename, proxy adds base URL
   displayName: 'VOSK Small',
   size: '40 MB',
+};
+
+// Get the proxy URL for Vosk model download
+export const getVoskProxyUrl = (modelFile: string): string => {
+  const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+  return `${supabaseUrl}/functions/v1/proxy-model?model=${modelFile}`;
 };
 
 // Optimized Whisper: Use tiny.en - smallest, fastest, for browser compatibility
