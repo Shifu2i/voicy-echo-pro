@@ -1,5 +1,5 @@
 import { createModel, KaldiRecognizer, Model } from 'vosk-browser';
-import { getModelConfig, getModelSize, ModelSize } from '@/utils/modelConfig';
+import { getModelConfig, getModelSize, getVoskProxyUrl, ModelSize } from '@/utils/modelConfig';
 
 let model: Model | null = null;
 let isModelLoading = false;
@@ -156,9 +156,10 @@ export const loadModel = async (onProgress?: ProgressCallback): Promise<Model> =
   isModelLoading = true;
   const config = getModelConfig();
   const modelKey = config.vosk.modelKey;
-  const modelUrl = config.vosk.modelUrl;
+  const modelFile = config.vosk.modelUrl; // This is now just the filename
+  const proxyUrl = getVoskProxyUrl(modelFile);
   
-  console.log(`[VOSK] Loading model: ${modelKey} from ${modelUrl}`);
+  console.log(`[VOSK] Loading model: ${modelKey} via proxy`);
   
   modelLoadPromise = (async () => {
     // Check cache first
@@ -168,8 +169,8 @@ export const loadModel = async (onProgress?: ProgressCallback): Promise<Model> =
       console.log(`[VOSK] Found cached model: ${modelKey}`);
       if (onProgress) onProgress({ loaded: 100, total: 100, percent: 100 });
     } else {
-      console.log(`[VOSK] Downloading model: ${modelKey}`);
-      modelData = await fetchModelDirect(modelUrl, modelKey, onProgress);
+      console.log(`[VOSK] Downloading model via proxy: ${proxyUrl}`);
+      modelData = await fetchModelDirect(proxyUrl, modelKey, onProgress);
       await cacheModel(modelKey, modelData);
       console.log(`[VOSK] Model cached: ${modelKey}`);
     }
