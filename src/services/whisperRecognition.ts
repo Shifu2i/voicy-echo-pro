@@ -3,7 +3,7 @@ import { getModelConfig, getModelSize, ModelSize } from '@/utils/modelConfig';
 
 let transcriber: AutomaticSpeechRecognitionPipeline | null = null;
 let whisperLoading = false;
-let whisperLoadPromise: Promise<AutomaticSpeechRecognitionPipeline> | null = null;
+let whisperLoadPromise: Promise<AutomaticSpeechRecognitionPipeline | null> | null = null;
 let activeDevice: 'webgpu' | 'wasm' | 'native' = 'wasm';
 let loadedModelSize: ModelSize | null = null;
 let usingNative = false;
@@ -13,11 +13,15 @@ const isTauri = (): boolean => {
   return typeof window !== 'undefined' && '__TAURI__' in window;
 };
 
-// Tauri invoke helper
+// Tauri invoke helper with caching
+let tauriInvokeCache: typeof import('@tauri-apps/api/core').invoke | null = null;
 const tauriInvoke = async <T>(cmd: string, args?: Record<string, unknown>): Promise<T> => {
   if (!isTauri()) throw new Error('Not running in Tauri');
-  const { invoke } = await import('@tauri-apps/api/core');
-  return invoke<T>(cmd, args);
+  if (!tauriInvokeCache) {
+    const { invoke } = await import('@tauri-apps/api/core');
+    tauriInvokeCache = invoke;
+  }
+  return tauriInvokeCache<T>(cmd, args);
 };
 
 export interface FileProgress {
@@ -30,35 +34,23 @@ export interface FileProgress {
 export interface WhisperProgress {
   status: 'downloading' | 'loading' | 'ready';
   progress?: number;
-  overallProgress: number; // 0-100 across all files
+  overallProgress: number;
   file?: string;
-  device?: 'webgpu' | 'wasm';
+  device?: 'webgpu' | 'wasm' | 'native';
   loaded?: number;
   total?: number;
-  estimatedTimeRemaining?: number; // seconds
+  estimatedTimeRemaining?: number;
   files: FileProgress[];
 }
 
 export type WhisperProgressCallback = (progress: WhisperProgress) => void;
-
-// Check if WebGPU is available for GPU acceleration
-const checkWebGPUSupport = async (): Promise<boolean> => {
-  try {
-    // @ts-expect-error - WebGPU types not in all TS configs
-    if (!navigator.gpu) return false;
-    // @ts-expect-error - WebGPU types not in all TS configs
-    const adapter = await navigator.gpu.requestAdapter();
-    return adapter !== null;
-  } catch {
-    return false;
-  }
-};
 
 // Clear loaded model to force reload
 export const clearWhisperModel = (): void => {
   transcriber = null;
   whisperLoadPromise = null;
   loadedModelSize = null;
+  usingNative = false;
 };
 
 // Check if model needs reload due to size change
@@ -86,7 +78,7 @@ export const loadWhisperModel = async (onProgress?: WhisperProgressCallback): Pr
   }
   
   if (transcriber) return transcriber;
-  if (usingNative) return null; // Native mode doesn't use transcriber
+  if (usingNative) return null;
   if (whisperLoadPromise) return whisperLoadPromise;
 
   // Try native Whisper first in Tauri
@@ -95,33 +87,24 @@ export const loadWhisperModel = async (onProgress?: WhisperProgressCallback): Pr
       const isDownloaded = await tauriInvoke<boolean>('is_whisper_model_downloaded');
       
       if (!isDownloaded) {
-        // Download native model
         console.log('[Whisper] Downloading native model...');
-        if (onProgress) {
-          onProgress({ status: 'downloading', progress: 0, overallProgress: 0, device: 'native' as any, files: [] });
-        }
-        
+        onProgress?.({ status: 'downloading', progress: 0, overallProgress: 0, device: 'native', files: [] });
         await tauriInvoke<string>('download_whisper_model');
       }
       
-      // Load native model
       console.log('[Whisper] Loading native model...');
-      if (onProgress) {
-        onProgress({ status: 'loading', progress: 50, overallProgress: 50, device: 'native' as any, files: [] });
-      }
+      onProgress?.({ status: 'loading', progress: 50, overallProgress: 50, device: 'native', files: [] });
       
       await tauriInvoke<void>('load_whisper_model');
       
       usingNative = true;
-      activeDevice = 'native' as any;
+      activeDevice = 'native';
       loadedModelSize = currentSize;
       
       console.log('[Whisper] Native model loaded successfully');
-      if (onProgress) {
-        onProgress({ status: 'ready', overallProgress: 100, device: 'native' as any, files: [] });
-      }
+      onProgress?.({ status: 'ready', overallProgress: 100, device: 'native', files: [] });
       
-      return null; // Native mode
+      return null;
     } catch (err) {
       console.warn('[Whisper] Native loading failed, falling back to WASM:', err);
     }
@@ -132,18 +115,12 @@ export const loadWhisperModel = async (onProgress?: WhisperProgressCallback): Pr
   const modelId = config.whisper.modelId;
 
   whisperLoadPromise = (async () => {
-    // Check for GPU support first - always use most powerful option
-    const hasWebGPU = await checkWebGPUSupport();
-    let device: 'webgpu' | 'wasm' = hasWebGPU ? 'webgpu' : 'wasm';
-    activeDevice = device;
-    
-    console.log(`[Whisper] Loading ${modelId} on ${device.toUpperCase()}${hasWebGPU ? ' (GPU Accelerated)' : ' (CPU)'}`);
-    if (onProgress) onProgress({ status: 'downloading', progress: 0, overallProgress: 0, device, files: [] });
+    activeDevice = 'wasm';
+    console.log(`[Whisper] Loading ${modelId} on WASM (CPU)`);
+    onProgress?.({ status: 'downloading', progress: 0, overallProgress: 0, device: 'wasm', files: [] });
 
     const downloadStartTime = Date.now();
     const filesMap = new Map<string, FileProgress>();
-    let totalBytesAllFiles = 0;
-    let loadedBytesAllFiles = 0;
 
     const calculateOverallProgress = (): number => {
       if (filesMap.size === 0) return 0;
@@ -166,79 +143,54 @@ export const loadWhisperModel = async (onProgress?: WhisperProgressCallback): Pr
       const fileName = typeof data.file === 'string' ? data.file.split('/').pop() || data.file : undefined;
       
       if (fileName) {
-        // Get or create file entry
         if (!filesMap.has(fileName)) {
-          filesMap.set(fileName, {
-            name: fileName,
-            loaded: 0,
-            total: 0,
-            status: 'pending'
-          });
+          filesMap.set(fileName, { name: fileName, loaded: 0, total: 0, status: 'pending' });
         }
         
         const fileEntry = filesMap.get(fileName)!;
         
-        // Update based on status
         if (status === 'initiate' || status === 'download') {
           fileEntry.status = 'downloading';
-          if (typeof data.total === 'number') {
-            fileEntry.total = data.total;
-          }
+          if (typeof data.total === 'number') fileEntry.total = data.total;
         } else if (status === 'progress') {
           fileEntry.status = 'downloading';
           if (typeof data.loaded === 'number') fileEntry.loaded = data.loaded;
           if (typeof data.total === 'number') fileEntry.total = data.total;
         } else if (status === 'done') {
           fileEntry.status = 'done';
-          if (fileEntry.total > 0) {
-            fileEntry.loaded = fileEntry.total;
-          }
+          if (fileEntry.total > 0) fileEntry.loaded = fileEntry.total;
         }
-        
-        filesMap.set(fileName, fileEntry);
       }
       
-      // Calculate totals across all files
-      totalBytesAllFiles = 0;
-      loadedBytesAllFiles = 0;
+      // Calculate totals
+      let totalBytes = 0, loadedBytes = 0;
       filesMap.forEach((file) => {
-        totalBytesAllFiles += file.total;
-        loadedBytesAllFiles += file.loaded;
+        totalBytes += file.total;
+        loadedBytes += file.loaded;
       });
       
-      // Calculate estimated time remaining
+      // Calculate ETA
       let estimatedTimeRemaining: number | undefined;
-      if (loadedBytesAllFiles > 0 && totalBytesAllFiles > 0) {
+      if (loadedBytes > 0 && totalBytes > 0) {
         const elapsedSeconds = (Date.now() - downloadStartTime) / 1000;
-        const bytesPerSecond = loadedBytesAllFiles / elapsedSeconds;
-        const remainingBytes = totalBytesAllFiles - loadedBytesAllFiles;
+        const bytesPerSecond = loadedBytes / elapsedSeconds;
         if (bytesPerSecond > 0) {
-          estimatedTimeRemaining = Math.ceil(remainingBytes / bytesPerSecond);
+          estimatedTimeRemaining = Math.ceil((totalBytes - loadedBytes) / bytesPerSecond);
         }
       }
-      
-      const overallProgress = calculateOverallProgress();
       
       onProgress({
         status: 'downloading',
         progress: typeof data.progress === 'number' ? Math.round(data.progress) : undefined,
-        overallProgress,
+        overallProgress: calculateOverallProgress(),
         file: fileName,
-        device,
-        loaded: loadedBytesAllFiles,
-        total: totalBytesAllFiles,
+        device: 'wasm',
+        loaded: loadedBytes,
+        total: totalBytes,
         estimatedTimeRemaining,
         files: Array.from(filesMap.values())
       });
     };
-
-    // Start with CPU (WASM) - more stable in browser environments
-    // WebGPU can cause crashes in certain browser configurations
-    device = 'wasm';
-    activeDevice = 'wasm';
-    
-    console.log(`[Whisper] Loading ${modelId} on WASM (CPU - stable mode)`);
-    if (onProgress) onProgress({ status: 'downloading', progress: 0, overallProgress: 0, device: 'wasm', files: [] });
 
     try {
       const pipe = await pipeline(
@@ -246,13 +198,13 @@ export const loadWhisperModel = async (onProgress?: WhisperProgressCallback): Pr
         modelId,
         {
           device: 'wasm',
-          dtype: config.whisper.cpuDtype as 'fp32' | 'q8', // Use config dtype
+          dtype: config.whisper.cpuDtype as 'fp32' | 'q8',
           progress_callback: progressCallback,
         }
       );
       
       console.log('[Whisper] Model loaded successfully on WASM (CPU)');
-      if (onProgress) onProgress({ status: 'ready', overallProgress: 100, device: 'wasm', files: Array.from(filesMap.values()) });
+      onProgress?.({ status: 'ready', overallProgress: 100, device: 'wasm', files: Array.from(filesMap.values()) });
       return pipe;
     } catch (error) {
       console.error('[Whisper] Failed to load model:', error);
@@ -272,28 +224,29 @@ export const loadWhisperModel = async (onProgress?: WhisperProgressCallback): Pr
   }
 };
 
-export const isWhisperLoaded = (): boolean => !!transcriber || usingNative;
+export const isWhisperLoaded = (): boolean => transcriber !== null || usingNative;
 export const isWhisperLoading = (): boolean => whisperLoading;
 export const getActiveDevice = (): 'webgpu' | 'wasm' | 'native' => activeDevice;
 export const isUsingNative = (): boolean => usingNative;
 
+// Reusable audio context for transcription
+let sharedAudioContext: AudioContext | null = null;
+const getAudioContext = async (): Promise<AudioContext> => {
+  if (!sharedAudioContext || sharedAudioContext.state === 'closed') {
+    sharedAudioContext = new AudioContext({ sampleRate: 16000 });
+  }
+  return sharedAudioContext;
+};
+
 export const transcribeAudio = async (audioBlob: Blob): Promise<string> => {
-  // Convert blob to array buffer then to audio data
   const arrayBuffer = await audioBlob.arrayBuffer();
-  
-  // Decode audio using AudioContext
-  const audioContext = new AudioContext({ sampleRate: 16000 });
+  const audioContext = await getAudioContext();
   const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
-  
-  // Get audio data as Float32Array
   const audioData = audioBuffer.getChannelData(0);
-  
-  await audioContext.close();
 
   // Use native transcription if available
   if (usingNative && isTauri()) {
     try {
-      // Convert Float32Array to regular array for Tauri
       const audioArray = Array.from(audioData);
       const result = await tauriInvoke<string>('transcribe_audio_native', { audioData: audioArray });
       return result.trim();
@@ -303,22 +256,13 @@ export const transcribeAudio = async (audioBlob: Blob): Promise<string> => {
     }
   }
 
-  // Use WASM transcriber
   if (!transcriber) {
     throw new Error('Whisper model not loaded. Call loadWhisperModel() first.');
   }
 
-  // Run transcription - no language/task for English-only models
   const result = await transcriber(audioData) as { text: string } | string;
-
-  // Handle result - can be string or object with text property
-  if (typeof result === 'string') {
-    return result.trim();
-  }
   
-  if (result && typeof result.text === 'string') {
-    return result.text.trim();
-  }
-
+  if (typeof result === 'string') return result.trim();
+  if (result && typeof result.text === 'string') return result.text.trim();
   return '';
 };

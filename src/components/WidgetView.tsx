@@ -1,7 +1,7 @@
-import { useState, useRef, useCallback, useEffect } from 'react';
+import { useState, useRef, useCallback, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
-import { Mic, Square, Loader2, X, Trash2, RefreshCw, Maximize2, Minimize2, ArrowLeft, Send, Clipboard, Keyboard } from 'lucide-react';
+import { Mic, Square, Loader2, X, Trash2, Maximize2, Minimize2, ArrowLeft, Send, Clipboard, Keyboard } from 'lucide-react';
 import { toast } from 'sonner';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
@@ -20,18 +20,38 @@ interface TypeResult {
   message?: string;
 }
 
-// Check if running in Tauri
-const isTauri = '__TAURI__' in window;
+// Check if running in Tauri - cached
+const isTauri = typeof window !== 'undefined' && '__TAURI__' in window;
 
-// Tauri API wrapper
-const getTauriAPI = async () => {
+interface TauriAPI {
+  isTauri: boolean;
+  platform: string;
+  typeText: (text: string) => Promise<TypeResult>;
+  typeTextWithDelay: (text: string, delayMs?: number) => Promise<TypeResult>;
+  pasteText: (text: string) => Promise<TypeResult>;
+  typeToPreviousApp: (text: string, inputMethod: string, hideWidget: boolean, typingDelay?: number) => Promise<TypeResult>;
+  copyToClipboard: (text: string) => Promise<{ success: boolean }>;
+  readClipboard: () => Promise<string>;
+  checkAccessibilityPermission: () => Promise<boolean>;
+  minimizeWindow: () => Promise<void>;
+  closeWindow: () => Promise<void>;
+  setAlwaysOnTop: (value: boolean) => Promise<void>;
+  getAlwaysOnTop: () => Promise<boolean>;
+  onToggleDictation: (callback: () => void) => () => void;
+  onStopDictation: (callback: () => void) => () => void;
+}
+
+// Cached Tauri API
+let cachedTauriAPI: TauriAPI | null = null;
+
+const getTauriAPI = async (): Promise<TauriAPI | null> => {
   if (!isTauri) return null;
+  if (cachedTauriAPI) return cachedTauriAPI;
   
   const { invoke } = await import('@tauri-apps/api/core');
   const { listen } = await import('@tauri-apps/api/event');
-  const { getCurrentWindow } = await import('@tauri-apps/api/window');
   
-  return {
+  cachedTauriAPI = {
     isTauri: true,
     platform: navigator.platform,
     
@@ -62,6 +82,8 @@ const getTauriAPI = async () => {
       return () => { unlisten.then(fn => fn()); };
     },
   };
+  
+  return cachedTauriAPI;
 };
 
 export const WidgetView = () => {
@@ -97,11 +119,11 @@ export const WidgetView = () => {
   const [isDragging, setIsDragging] = useState(false);
   const dragStartRef = useRef({ x: 0, y: 0, posX: 0, posY: 0 });
   
-  // Initialize Tauri API
+  // Initialize Tauri API once
   useEffect(() => {
-    getTauriAPI().then(api => {
-      tauriAPIRef.current = api;
-    });
+    if (isTauri) {
+      getTauriAPI().then(api => { tauriAPIRef.current = api; });
+    }
   }, []);
   
   // Save auto-type preference
@@ -113,38 +135,47 @@ export const WidgetView = () => {
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
 
-  // Load Whisper (primary) and VOSK (preview)
+  // Load Whisper (primary) and VOSK (preview) - optimized
+  const voskLoadingRef = useRef(false);
+  
   useEffect(() => {
+    let cancelled = false;
+    
     const loadModels = async () => {
       try {
         if (!isWhisperLoaded()) {
           const progressCallback: WhisperProgressCallback = (progress) => {
-            if (progress.progress !== undefined) {
-              setLoadProgress(progress.progress);
-            }
-            if (progress.device) {
-              setWhisperDevice(progress.device);
-            }
+            if (cancelled) return;
+            if (progress.overallProgress !== undefined) setLoadProgress(progress.overallProgress);
+            if (progress.device) setWhisperDevice(progress.device);
           };
           await loadWhisperModel(progressCallback);
         }
         
+        if (cancelled) return;
         setWhisperDevice(getActiveDevice());
         setModelStatus('ready');
 
-        // Load VOSK in background for preview
-        if (!isModelLoaded()) {
-          loadModel().then(() => setVoskReady(true)).catch(console.error);
+        // Load VOSK in background for preview - only once
+        if (!voskLoadingRef.current && !isModelLoaded()) {
+          voskLoadingRef.current = true;
+          loadModel()
+            .then(() => { if (!cancelled) setVoskReady(true); })
+            .catch(console.error)
+            .finally(() => { voskLoadingRef.current = false; });
         } else {
-          setVoskReady(true);
+          setVoskReady(isModelLoaded());
         }
       } catch (error) {
-        console.error('Failed to load Whisper:', error);
-        setModelStatus('error');
+        if (!cancelled) {
+          console.error('Failed to load Whisper:', error);
+          setModelStatus('error');
+        }
       }
     };
 
     loadModels();
+    return () => { cancelled = true; };
   }, []);
 
   // VOSK callback for preview only
@@ -270,13 +301,14 @@ export const WidgetView = () => {
     }
   };
 
+  // Memoized toggle to prevent recreating on every render
   const toggleRecording = useCallback(() => {
     if (isRecording) {
       stopRecording();
     } else {
       startRecording();
     }
-  }, [isRecording]);
+  }, [isRecording, modelStatus, voskReady, handleVoskResult, autoTypeEnabled]);
 
   const handleDelete = useCallback(() => {
     setLastTranscription('');
