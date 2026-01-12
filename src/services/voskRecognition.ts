@@ -211,12 +211,32 @@ export class VoskRecognizer {
   private onResult: ResultCallback;
   private isRunning = false;
   private deviceId?: string;
+  private ownsStream = false; // Track if we created the stream
 
   constructor(onResult: ResultCallback, deviceId?: string) {
     this.onResult = onResult;
     this.deviceId = deviceId;
   }
 
+  // Start with an existing stream (shared with MediaRecorder)
+  async startWithStream(stream: MediaStream): Promise<void> {
+    if (this.isRunning) return;
+    
+    if (!model) {
+      throw new Error('Model not loaded. Call loadModel() first.');
+    }
+
+    try {
+      this.mediaStream = stream;
+      this.ownsStream = false; // We don't own this stream
+      await this.initAudioProcessing();
+    } catch (error) {
+      this.cleanup();
+      throw error;
+    }
+  }
+
+  // Start with a new stream (creates its own)
   async start(): Promise<void> {
     if (this.isRunning) return;
     
@@ -225,32 +245,12 @@ export class VoskRecognizer {
     }
 
     try {
-      this.audioContext = new AudioContext({ sampleRate: 16000 });
-      
-      this.recognizer = new model.KaldiRecognizer(this.audioContext.sampleRate);
-      
-      this.recognizer.on('result', (message: any) => {
-        const result = message.result;
-        if (result && result.text && result.text.trim()) {
-          this.onResult(result.text, true);
-        }
-      });
-
-      this.recognizer.on('partialresult', (message: any) => {
-        const partial = message.result;
-        if (partial && partial.partial && partial.partial.trim()) {
-          this.onResult(partial.partial, false);
-        }
-      });
-
       const audioConstraints: MediaTrackConstraints = {
         echoCancellation: true,
         noiseSuppression: true,
         autoGainControl: true,
-        sampleRate: 16000
       };
 
-      // Use specific device if provided
       if (this.deviceId) {
         audioConstraints.deviceId = { exact: this.deviceId };
       }
@@ -258,27 +258,53 @@ export class VoskRecognizer {
       this.mediaStream = await navigator.mediaDevices.getUserMedia({
         audio: audioConstraints
       });
-
-      this.sourceNode = this.audioContext.createMediaStreamSource(this.mediaStream);
-      this.processorNode = this.audioContext.createScriptProcessor(4096, 1, 1);
-
-      this.processorNode.onaudioprocess = (event) => {
-        if (this.recognizer && this.isRunning) {
-          const inputData = event.inputBuffer.getChannelData(0);
-          const buffer = this.audioContext!.createBuffer(1, inputData.length, this.audioContext!.sampleRate);
-          buffer.copyToChannel(inputData, 0);
-          this.recognizer.acceptWaveform(buffer);
-        }
-      };
-
-      this.sourceNode.connect(this.processorNode);
-      this.processorNode.connect(this.audioContext.destination);
+      this.ownsStream = true; // We created this stream
       
-      this.isRunning = true;
+      await this.initAudioProcessing();
     } catch (error) {
       this.cleanup();
       throw error;
     }
+  }
+
+  private async initAudioProcessing(): Promise<void> {
+    if (!this.mediaStream) return;
+
+    // Use 16000 sample rate for Vosk
+    this.audioContext = new AudioContext({ sampleRate: 16000 });
+    
+    this.recognizer = new model!.KaldiRecognizer(this.audioContext.sampleRate);
+    
+    this.recognizer.on('result', (message: any) => {
+      const result = message.result;
+      if (result && result.text && result.text.trim()) {
+        this.onResult(result.text, true);
+      }
+    });
+
+    this.recognizer.on('partialresult', (message: any) => {
+      const partial = message.result;
+      if (partial && partial.partial && partial.partial.trim()) {
+        this.onResult(partial.partial, false);
+      }
+    });
+
+    this.sourceNode = this.audioContext.createMediaStreamSource(this.mediaStream);
+    this.processorNode = this.audioContext.createScriptProcessor(4096, 1, 1);
+
+    this.processorNode.onaudioprocess = (event) => {
+      if (this.recognizer && this.isRunning) {
+        const inputData = event.inputBuffer.getChannelData(0);
+        const buffer = this.audioContext!.createBuffer(1, inputData.length, this.audioContext!.sampleRate);
+        buffer.copyToChannel(inputData, 0);
+        this.recognizer.acceptWaveform(buffer);
+      }
+    };
+
+    this.sourceNode.connect(this.processorNode);
+    this.processorNode.connect(this.audioContext.destination);
+    
+    this.isRunning = true;
   }
 
   stop(): void {
@@ -304,10 +330,11 @@ export class VoskRecognizer {
       this.sourceNode = null;
     }
     
-    if (this.mediaStream) {
+    // Only stop the stream if we created it
+    if (this.mediaStream && this.ownsStream) {
       this.mediaStream.getTracks().forEach(track => track.stop());
-      this.mediaStream = null;
     }
+    this.mediaStream = null;
     
     if (this.audioContext && this.audioContext.state !== 'closed') {
       this.audioContext.close();

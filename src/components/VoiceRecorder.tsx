@@ -32,7 +32,7 @@ export const VoiceRecorder = ({ onTranscription }: VoiceRecorderProps) => {
   const audioChunksRef = useRef<Blob[]>([]);
   const voskLoadingRef = useRef(false);
 
-  // Load models on demand - optimized for speed
+  // Load models on demand - load Vosk in parallel for fast preview
   const loadModels = async () => {
     if (modelStatus === 'loading' || modelStatus === 'ready') return;
     
@@ -41,32 +41,38 @@ export const VoiceRecorder = ({ onTranscription }: VoiceRecorderProps) => {
     setFileProgress([]);
     
     try {
-      // Load Whisper first (required for transcription)
-      if (!isWhisperLoaded()) {
-        await loadWhisperModel((progress) => {
-          if (progress.overallProgress !== undefined) setLoadProgress(progress.overallProgress);
-          if (progress.device) setWhisperDevice(progress.device);
-          if (progress.loaded !== undefined) setLoadedBytes(progress.loaded);
-          if (progress.total !== undefined) setTotalBytes(progress.total);
-          if (progress.estimatedTimeRemaining !== undefined) setTimeRemaining(progress.estimatedTimeRemaining);
-          if (progress.file) setCurrentFile(progress.file);
-          if (progress.files) setFileProgress(progress.files);
-        });
-      }
+      // Start loading BOTH models in parallel for faster startup
+      const whisperPromise = !isWhisperLoaded() 
+        ? loadWhisperModel((progress) => {
+            if (progress.overallProgress !== undefined) setLoadProgress(progress.overallProgress);
+            if (progress.device) setWhisperDevice(progress.device);
+            if (progress.loaded !== undefined) setLoadedBytes(progress.loaded);
+            if (progress.total !== undefined) setTotalBytes(progress.total);
+            if (progress.estimatedTimeRemaining !== undefined) setTimeRemaining(progress.estimatedTimeRemaining);
+            if (progress.file) setCurrentFile(progress.file);
+            if (progress.files) setFileProgress(progress.files);
+          })
+        : Promise.resolve();
       
-      setWhisperDevice(getActiveDevice());
-      setModelStatus('ready');
-      
-      // Load Vosk in background (optional preview) - only once
+      // Start Vosk loading immediately in parallel (don't wait for Whisper)
       if (!voskLoadingRef.current && !isModelLoaded()) {
         voskLoadingRef.current = true;
         loadModel()
-          .then(() => setVoskReady(true))
+          .then(() => {
+            setVoskReady(true);
+            console.log('[VoiceRecorder] Vosk preview ready');
+          })
           .catch((err) => console.warn('[VoiceRecorder] Vosk preview unavailable:', err))
           .finally(() => { voskLoadingRef.current = false; });
       } else {
         setVoskReady(isModelLoaded());
       }
+      
+      // Wait for Whisper (required for final transcription)
+      await whisperPromise;
+      
+      setWhisperDevice(getActiveDevice());
+      setModelStatus('ready');
     } catch (error) {
       console.error('Failed to load Whisper:', error);
       setModelStatus('error');
@@ -109,26 +115,29 @@ export const VoiceRecorder = ({ onTranscription }: VoiceRecorderProps) => {
       const deviceId = getSelectedMicrophoneId();
       const audioConstraints: MediaTrackConstraints = {
         echoCancellation: true,
-        noiseSuppression: true
+        noiseSuppression: true,
+        autoGainControl: true,
       };
       if (deviceId) {
         audioConstraints.deviceId = { exact: deviceId };
       }
 
-      // Start VOSK for real-time preview if ready
+      // Get a single shared audio stream
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: audioConstraints });
+      setAudioStream(stream);
+
+      // Start VOSK for real-time preview using the shared stream
       if (voskReady && isModelLoaded()) {
         try {
           recognizerRef.current = new VoskRecognizer(handleVoskResult, deviceId);
-          await recognizerRef.current.start();
+          await recognizerRef.current.startWithStream(stream);
+          console.log('[VoiceRecorder] Vosk preview started with shared stream');
         } catch (err) {
           console.warn('Vosk preview failed to start:', err);
         }
       }
 
-      // Start MediaRecorder for Whisper
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: audioConstraints });
-      setAudioStream(stream);
-      
+      // Start MediaRecorder using the same shared stream
       const mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm' });
       mediaRecorderRef.current = mediaRecorder;
 
@@ -154,19 +163,23 @@ export const VoiceRecorder = ({ onTranscription }: VoiceRecorderProps) => {
   const stopRecording = async () => {
     setIsRecording(false);
     setIsProcessing(true);
-    setAudioStream(null);
 
-    // Stop VOSK preview
+    // Stop VOSK preview first (doesn't own the stream)
     if (recognizerRef.current) {
       recognizerRef.current.stop();
       recognizerRef.current = null;
     }
 
-    // Stop MediaRecorder
+    // Stop MediaRecorder and then stop the shared stream
     if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
       mediaRecorderRef.current.stop();
-      mediaRecorderRef.current.stream.getTracks().forEach(track => track.stop());
     }
+    
+    // Stop the shared stream tracks
+    if (audioStream) {
+      audioStream.getTracks().forEach(track => track.stop());
+    }
+    setAudioStream(null);
 
     toast.success('Processing with Whisper...');
 

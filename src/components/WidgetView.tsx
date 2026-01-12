@@ -135,37 +135,46 @@ export const WidgetView = () => {
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
 
-  // Load Whisper (primary) and VOSK (preview) - optimized
+  // Load Whisper (primary) and VOSK (preview) - load both in parallel for speed
   const voskLoadingRef = useRef(false);
+  const audioStreamRef = useRef<MediaStream | null>(null);
   
   useEffect(() => {
     let cancelled = false;
     
     const loadModels = async () => {
       try {
-        if (!isWhisperLoaded()) {
-          const progressCallback: WhisperProgressCallback = (progress) => {
-            if (cancelled) return;
-            if (progress.overallProgress !== undefined) setLoadProgress(progress.overallProgress);
-            if (progress.device) setWhisperDevice(progress.device);
-          };
-          await loadWhisperModel(progressCallback);
-        }
+        // Start loading BOTH models in parallel for faster startup
+        const whisperPromise = !isWhisperLoaded() 
+          ? loadWhisperModel((progress) => {
+              if (cancelled) return;
+              if (progress.overallProgress !== undefined) setLoadProgress(progress.overallProgress);
+              if (progress.device) setWhisperDevice(progress.device);
+            })
+          : Promise.resolve();
         
-        if (cancelled) return;
-        setWhisperDevice(getActiveDevice());
-        setModelStatus('ready');
-
-        // Load VOSK in background for preview - only once
+        // Start Vosk loading immediately in parallel
         if (!voskLoadingRef.current && !isModelLoaded()) {
           voskLoadingRef.current = true;
           loadModel()
-            .then(() => { if (!cancelled) setVoskReady(true); })
+            .then(() => { 
+              if (!cancelled) {
+                setVoskReady(true);
+                console.log('[WidgetView] Vosk preview ready');
+              }
+            })
             .catch(console.error)
             .finally(() => { voskLoadingRef.current = false; });
         } else {
           setVoskReady(isModelLoaded());
         }
+        
+        // Wait for Whisper (required for final transcription)
+        await whisperPromise;
+        
+        if (cancelled) return;
+        setWhisperDevice(getActiveDevice());
+        setModelStatus('ready');
       } catch (error) {
         if (!cancelled) {
           console.error('Failed to load Whisper:', error);
@@ -222,20 +231,29 @@ export const WidgetView = () => {
       const deviceId = getSelectedMicrophoneId();
       const audioConstraints: MediaTrackConstraints = {
         echoCancellation: true,
-        noiseSuppression: true
+        noiseSuppression: true,
+        autoGainControl: true,
       };
       if (deviceId) {
         audioConstraints.deviceId = { exact: deviceId };
       }
 
-      // Start VOSK for real-time preview if available
-      if (voskReady) {
-        recognizerRef.current = new VoskRecognizer(handleVoskResult, deviceId);
-        await recognizerRef.current.start();
+      // Get a single shared audio stream
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: audioConstraints });
+      audioStreamRef.current = stream;
+
+      // Start VOSK for real-time preview using the shared stream
+      if (voskReady && isModelLoaded()) {
+        try {
+          recognizerRef.current = new VoskRecognizer(handleVoskResult, deviceId);
+          await recognizerRef.current.startWithStream(stream);
+          console.log('[WidgetView] Vosk preview started with shared stream');
+        } catch (err) {
+          console.warn('Vosk preview failed to start:', err);
+        }
       }
 
-      // Start MediaRecorder for Whisper
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: audioConstraints });
+      // Start MediaRecorder using the same shared stream
       const mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm' });
       mediaRecorderRef.current = mediaRecorder;
 
@@ -262,7 +280,7 @@ export const WidgetView = () => {
     setIsProcessing(true);
     setPartialText('');
 
-    // Stop VOSK preview
+    // Stop VOSK preview first (doesn't own the stream)
     if (recognizerRef.current) {
       recognizerRef.current.stop();
       recognizerRef.current = null;
@@ -271,7 +289,12 @@ export const WidgetView = () => {
     // Stop MediaRecorder
     if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
       mediaRecorderRef.current.stop();
-      mediaRecorderRef.current.stream.getTracks().forEach(track => track.stop());
+    }
+    
+    // Stop the shared stream tracks
+    if (audioStreamRef.current) {
+      audioStreamRef.current.getTracks().forEach(track => track.stop());
+      audioStreamRef.current = null;
     }
 
     try {
