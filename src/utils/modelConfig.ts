@@ -33,7 +33,9 @@ const VOSK_SMALL: VoskConfig = {
 
 // Get the proxy URL for Vosk model download
 export const getVoskProxyUrl = (modelFile: string): string => {
-  const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+  // Use env var with fallback to constructed URL from project ID
+  const projectId = import.meta.env.VITE_SUPABASE_PROJECT_ID || 'vpuzzcerqxqinouqjodq';
+  const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || `https://${projectId}.supabase.co`;
   return `${supabaseUrl}/functions/v1/proxy-model?model=${modelFile}`;
 };
 
