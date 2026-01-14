@@ -246,4 +246,25 @@ All colors MUST be HSL.
   .menu-item-hover {
     @apply transition-all duration-150 hover:bg-muted hover:translate-x-1;
   }
+
+  /* Spell check underline */
+  .spell-error {
+    text-decoration-line: underline;
+    text-decoration-style: wavy;
+    text-decoration-color: hsl(var(--destructive));
+    cursor: pointer;
+  }
+
+  /* Grammar check underline */
+  .grammar-error {
+    text-decoration-line: underline;
+    text-decoration-style: wavy;
+    text-decoration-color: hsl(210 100% 50%);
+    cursor: pointer;
+  }
+
+  /* Word highlight transition */
+  .word-highlight {
+    transition: background-color 0.1s ease;
+  }
 }
