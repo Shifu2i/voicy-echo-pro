@@ -40,23 +40,23 @@ const Index = () => {
           <div className="flex-1 flex justify-end">
             <button 
               onClick={() => setIsMenuOpen(true)}
-              className="p-2"
+              className="p-2 transition-all duration-150 hover:bg-muted rounded-lg active:scale-90"
             >
-              <Menu className="w-6 h-6 text-foreground" />
+              <Menu className="w-6 h-6 text-foreground transition-transform duration-200 hover:rotate-90" />
             </button>
           </div>
         </div>
 
         {/* Text Area */}
         <div 
-          className="rounded-3xl p-1"
+          className="rounded-3xl p-1 transition-all duration-300 hover:shadow-lg focus-within:shadow-xl focus-within:ring-2 focus-within:ring-primary/30"
           style={{ backgroundColor }}
         >
           <Textarea
             value={text}
             onChange={(e) => setText(e.target.value)}
             placeholder="Start recording or type here..."
-            className="min-h-[300px] text-base resize-none border-0 bg-transparent focus-visible:ring-0 rounded-3xl p-4"
+            className="min-h-[300px] text-base resize-none border-0 bg-transparent focus-visible:ring-0 rounded-3xl p-4 transition-all duration-200"
             style={{ 
               backgroundColor: 'transparent',
               color: writingColor
