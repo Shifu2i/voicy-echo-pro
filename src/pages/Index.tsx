@@ -1,17 +1,19 @@
 import { useState, useEffect } from 'react';
 import { Textarea } from '@/components/ui/textarea';
 import { VoiceRecorder } from '@/components/VoiceRecorder';
-import { Menu } from 'lucide-react';
+import { Menu, Volume2 } from 'lucide-react';
 import { useLocation } from 'react-router-dom';
 import { SideMenu } from '@/components/SideMenu';
 import { BottomTabs } from '@/components/BottomTabs';
 import { useAuth } from '@/contexts/AuthContext';
+import { ReadMode } from '@/components/ReadMode';
 
 const Index = () => {
   const location = useLocation();
   const { profile } = useAuth();
   const [text, setText] = useState('');
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [showReadMode, setShowReadMode] = useState(false);
 
   useEffect(() => {
     if (location.state?.text) {
@@ -64,8 +66,20 @@ const Index = () => {
           />
         </div>
 
-        {/* Voice Recorder */}
-        <VoiceRecorder onTranscription={handleTranscription} />
+        {/* Voice Recorder and Read Mode Button */}
+        <div className="space-y-3">
+          <VoiceRecorder onTranscription={handleTranscription} />
+          
+          {text.trim() && (
+            <button
+              onClick={() => setShowReadMode(true)}
+              className="w-full flex items-center justify-center gap-2 bg-secondary text-secondary-foreground py-3 rounded-full text-base font-medium hover-lift active:scale-95 transition-all"
+            >
+              <Volume2 className="w-5 h-5" />
+              Read Mode
+            </button>
+          )}
+        </div>
 
         {/* Bottom padding for tabs */}
         <div className="h-24" />
@@ -78,6 +92,14 @@ const Index = () => {
         onClose={() => setIsMenuOpen(false)} 
         text={text}
       />
+
+      {showReadMode && (
+        <ReadMode
+          text={text}
+          onClose={() => setShowReadMode(false)}
+          onTextChange={setText}
+        />
+      )}
     </div>
   );
 };

@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { Textarea } from '@/components/ui/textarea';
-import { Menu } from 'lucide-react';
+import { Menu, Volume2 } from 'lucide-react';
 import { useLocation } from 'react-router-dom';
 import { SideMenu } from '@/components/SideMenu';
 import { BottomTabs } from '@/components/BottomTabs';
@@ -8,6 +8,7 @@ import { VoiceEditRecorder } from '@/components/VoiceEditRecorder';
 import { VoiceCommandRecorder } from '@/components/VoiceCommandRecorder';
 import { useAuth } from '@/contexts/AuthContext';
 import { useUndoStack } from '@/hooks/useUndoStack';
+import { ReadMode } from '@/components/ReadMode';
 
 const Edit = () => {
   const location = useLocation();
@@ -17,6 +18,7 @@ const Edit = () => {
   const [selectedText, setSelectedText] = useState('');
   const [editMode, setEditMode] = useState<'delete' | 'replace' | 'voice-command' | null>(null);
   const [lastUtterance, setLastUtterance] = useState('');
+  const [showReadMode, setShowReadMode] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   
   const { pushState, undo, redo, canUndo, canRedo, reset } = useUndoStack(text);
@@ -165,6 +167,15 @@ const Edit = () => {
             >
               VOICE COMMAND
             </button>
+            {text.trim() && (
+              <button
+                onClick={() => setShowReadMode(true)}
+                className="w-full flex items-center justify-center gap-2 bg-muted text-muted-foreground py-3 rounded-full text-base font-medium hover-lift active:scale-95 transition-all"
+              >
+                <Volume2 className="w-5 h-5" />
+                Read Mode
+              </button>
+            )}
           </div>
         )}
 
@@ -179,6 +190,14 @@ const Edit = () => {
         onClose={() => setIsMenuOpen(false)} 
         text={text}
       />
+
+      {showReadMode && (
+        <ReadMode
+          text={text}
+          onClose={() => setShowReadMode(false)}
+          onTextChange={setText}
+        />
+      )}
     </div>
   );
 };
