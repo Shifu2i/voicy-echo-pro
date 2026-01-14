@@ -132,4 +132,118 @@ All colors MUST be HSL.
   .smooth-transition {
     transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   }
+
+  /* Micro-interaction utilities */
+  .active-scale {
+    @apply transition-transform duration-100 active:scale-95;
+  }
+
+  .hover-lift {
+    @apply transition-all duration-200 hover:scale-[1.02] hover:-translate-y-0.5 hover:shadow-lg;
+  }
+
+  .btn-press {
+    @apply transition-all duration-150 active:scale-[0.97] hover:shadow-md;
+  }
+
+  /* Icon bounce animation */
+  @keyframes icon-bounce {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-3px); }
+  }
+  .icon-bounce {
+    animation: icon-bounce 0.3s ease-out;
+  }
+
+  /* Ripple effect */
+  .ripple {
+    position: relative;
+    overflow: hidden;
+  }
+  .ripple::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: radial-gradient(circle, hsl(var(--foreground) / 0.15) 0%, transparent 60%);
+    transform: scale(0);
+    opacity: 0;
+    pointer-events: none;
+  }
+  .ripple:active::after {
+    animation: ripple-effect 0.4s ease-out;
+  }
+  @keyframes ripple-effect {
+    0% { transform: scale(0); opacity: 1; }
+    100% { transform: scale(2.5); opacity: 0; }
+  }
+
+  /* Slide animations for menus */
+  @keyframes slide-in-right {
+    from { transform: translateX(100%); opacity: 0; }
+    to { transform: translateX(0); opacity: 1; }
+  }
+  .animate-slide-in-right {
+    animation: slide-in-right 0.3s ease-out;
+  }
+
+  /* Stagger reveal for list items */
+  @keyframes fade-up {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  .animate-fade-up {
+    animation: fade-up 0.3s ease-out forwards;
+  }
+
+  /* Backdrop fade */
+  @keyframes fade-in-backdrop {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+  .animate-fade-backdrop {
+    animation: fade-in-backdrop 0.2s ease-out;
+  }
+
+  /* Color swatch hover */
+  .swatch-hover {
+    @apply transition-all duration-200 hover:scale-110 hover:ring-2 hover:ring-primary/50;
+  }
+
+  /* Selection ring animation */
+  @keyframes ring-pulse {
+    0%, 100% { box-shadow: 0 0 0 2px hsl(var(--primary)); }
+    50% { box-shadow: 0 0 0 4px hsl(var(--primary) / 0.5); }
+  }
+  .ring-pulse {
+    animation: ring-pulse 1s ease-in-out;
+  }
+
+  /* Icon spin on state change */
+  @keyframes icon-rotate {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(90deg); }
+  }
+  .icon-rotate {
+    animation: icon-rotate 0.2s ease-out;
+  }
+
+  /* Success checkmark pop */
+  @keyframes check-pop {
+    0% { transform: scale(0); opacity: 0; }
+    50% { transform: scale(1.2); }
+    100% { transform: scale(1); opacity: 1; }
+  }
+  .animate-check-pop {
+    animation: check-pop 0.3s ease-out;
+  }
+
+  /* Focus glow for inputs */
+  .focus-glow {
+    @apply transition-shadow duration-200 focus:ring-2 focus:ring-primary/40 focus:shadow-[0_0_12px_hsl(var(--primary)/0.3)];
+  }
+
+  /* Menu item hover */
+  .menu-item-hover {
+    @apply transition-all duration-150 hover:bg-muted hover:translate-x-1;
+  }
 }

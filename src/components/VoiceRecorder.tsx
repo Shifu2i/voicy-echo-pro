@@ -232,9 +232,9 @@ export const VoiceRecorder = ({ onTranscription }: VoiceRecorderProps) => {
         <Button
           onClick={loadModels}
           size="lg"
-          className="w-full py-6 text-base rounded-full"
+          className="w-full py-6 text-base rounded-full hover-lift active:scale-95"
         >
-          <Mic className="mr-2 h-5 w-5" />
+          <Mic className="mr-2 h-5 w-5 transition-transform group-hover:scale-110" />
           Tap to Enable Voice
         </Button>
         <p className="text-xs text-center text-muted-foreground">
@@ -415,6 +415,7 @@ export const VoiceRecorder = ({ onTranscription }: VoiceRecorderProps) => {
           size="lg"
           className={`
             relative overflow-hidden smooth-transition w-full py-6 text-base rounded-full
+            hover-lift active:scale-95
             ${isRecording ? 'recording-pulse glow-recording' : ''}
           `}
         >
@@ -425,12 +426,12 @@ export const VoiceRecorder = ({ onTranscription }: VoiceRecorderProps) => {
             </>
           ) : isRecording ? (
             <>
-              <Square className="mr-2 h-5 w-5" />
+              <Square className="mr-2 h-5 w-5 transition-transform duration-200" />
               STOP
             </>
           ) : (
             <>
-              <Mic className="mr-2 h-5 w-5" />
+              <Mic className="mr-2 h-5 w-5 transition-transform duration-200 group-hover:scale-110" />
               DICTATE
             </>
           )}

@@ -87,9 +87,9 @@ export const EditCommands = ({ text, onEditComplete }: EditCommandsProps) => {
             onClick={() => executeEdit(command.instruction, command.label)}
             variant={command.variant}
             size="sm"
-            className="smooth-transition"
+            className="smooth-transition hover-lift active:scale-95 group"
           >
-            <Icon className="mr-2 h-4 w-4" />
+            <Icon className="mr-2 h-4 w-4 transition-transform duration-200 group-hover:scale-110 group-active:rotate-12" />
             {command.label}
           </Button>
         );

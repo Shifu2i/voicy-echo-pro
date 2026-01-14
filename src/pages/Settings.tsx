@@ -324,9 +324,9 @@ const Settings = () => {
           <div className="flex-1 flex justify-end">
             <button 
               onClick={() => setIsMenuOpen(true)}
-              className="p-2"
+              className="p-2 transition-all duration-150 hover:bg-muted rounded-lg active:scale-90"
             >
-              <Menu className="w-6 h-6 text-foreground" />
+              <Menu className="w-6 h-6 text-foreground transition-transform duration-200 hover:rotate-90" />
             </button>
           </div>
         </div>
@@ -414,9 +414,9 @@ const Settings = () => {
                 disabled={isTesting}
                 variant="outline"
                 size="sm"
-                className="w-full mt-2"
+                className="w-full mt-2 group"
               >
-                <Play className="w-3 h-3 mr-2" />
+                <Play className={`w-3 h-3 mr-2 transition-transform duration-200 ${isTesting ? 'animate-pulse' : 'group-hover:scale-110'}`} />
                 {isTesting ? 'Playing...' : 'Test Voice'}
               </Button>
             </div>
@@ -438,14 +438,14 @@ const Settings = () => {
                   setModelSize('small');
                   toast.success('Model size set to Small. Reload models to apply.');
                 }}
-                className={`w-full p-3 rounded-xl border-2 text-left transition-all ${
+                className={`w-full p-3 rounded-xl border-2 text-left transition-all duration-200 active:scale-[0.98] ${
                   getModelSize() === 'small' 
-                    ? 'border-primary bg-primary/10' 
-                    : 'border-transparent bg-background hover:border-muted-foreground/30'
+                    ? 'border-primary bg-primary/10 shadow-md ring-pulse' 
+                    : 'border-transparent bg-background hover:border-muted-foreground/30 hover:shadow-sm'
                 }`}
               >
                 <div className="flex items-center gap-2">
-                  <Zap className="w-4 h-4 text-yellow-500" />
+                  <Zap className={`w-4 h-4 text-yellow-500 transition-transform duration-200 ${getModelSize() === 'small' ? 'scale-110' : ''}`} />
                   <span className="font-medium text-sm">Small (Fast)</span>
                 </div>
                 <p className="text-xs text-muted-foreground mt-1">
@@ -459,14 +459,14 @@ const Settings = () => {
                   setModelSize('large');
                   toast.success('Model size set to Large. Reload models to apply.');
                 }}
-                className={`w-full p-3 rounded-xl border-2 text-left transition-all ${
+                className={`w-full p-3 rounded-xl border-2 text-left transition-all duration-200 active:scale-[0.98] ${
                   getModelSize() === 'large' 
-                    ? 'border-primary bg-primary/10' 
-                    : 'border-transparent bg-background hover:border-muted-foreground/30'
+                    ? 'border-primary bg-primary/10 shadow-md ring-pulse' 
+                    : 'border-transparent bg-background hover:border-muted-foreground/30 hover:shadow-sm'
                 }`}
               >
                 <div className="flex items-center gap-2">
-                  <Gauge className="w-4 h-4 text-green-500" />
+                  <Gauge className={`w-4 h-4 text-green-500 transition-transform duration-200 ${getModelSize() === 'large' ? 'scale-110' : ''}`} />
                   <span className="font-medium text-sm">Large (Accurate)</span>
                 </div>
                 <p className="text-xs text-muted-foreground mt-1">
@@ -568,13 +568,14 @@ const Settings = () => {
           <div className="bg-muted rounded-2xl p-4">
             <button
               onClick={() => setIsMoreExpanded(!isMoreExpanded)}
-              className="w-full flex items-center justify-center py-2 text-sm font-medium text-foreground hover:text-foreground/80 transition-colors"
+              className="w-full flex items-center justify-center py-2 text-sm font-medium text-foreground hover:text-foreground/80 transition-all duration-200 active:scale-[0.98]"
             >
+              <span className={`transition-transform duration-200 inline-block mr-1 ${isMoreExpanded ? 'rotate-180' : ''}`}>▼</span>
               More
             </button>
             
             {isMoreExpanded && (
-              <div className="mt-4 pt-4 border-t border-border/50 space-y-6">
+              <div className="mt-4 pt-4 border-t border-border/50 space-y-6 animate-fade-up">
                 {/* Background Color */}
                 <div>
                   <Label className="text-sm font-medium text-foreground">
@@ -586,9 +587,9 @@ const Settings = () => {
                         key={color.value}
                         onClick={() => handleSaveBackgroundColor(color.value)}
                         disabled={isSaving}
-                        className={`w-full aspect-square rounded-xl border-2 transition-all ${
+                        className={`w-full aspect-square rounded-xl border-2 transition-all duration-200 swatch-hover active:scale-95 ${
                           backgroundColor === color.value
-                            ? 'border-primary ring-2 ring-primary ring-offset-2'
+                            ? 'border-primary ring-2 ring-primary ring-offset-2 ring-offset-background scale-105'
                             : 'border-transparent hover:border-muted-foreground/30'
                         }`}
                         style={{ backgroundColor: color.value }}
@@ -630,9 +631,9 @@ const Settings = () => {
                         key={color.value}
                         onClick={() => handleSaveWritingColor(color.value)}
                         disabled={isSaving}
-                        className={`w-full aspect-square rounded-xl border-2 transition-all ${
+                        className={`w-full aspect-square rounded-xl border-2 transition-all duration-200 swatch-hover active:scale-95 ${
                           writingColor === color.value
-                            ? 'border-primary ring-2 ring-primary ring-offset-2'
+                            ? 'border-primary ring-2 ring-primary ring-offset-2 ring-offset-background scale-105'
                             : 'border-transparent hover:border-muted-foreground/30'
                         }`}
                         style={{ backgroundColor: color.value }}
@@ -722,18 +723,18 @@ const Settings = () => {
                   <Button
                     onClick={handleSignOut}
                     variant="outline"
-                    className="w-full rounded-xl py-4"
+                    className="w-full rounded-xl py-4 group"
                   >
-                    <LogOut className="w-4 h-4 mr-2" />
+                    <LogOut className="w-4 h-4 mr-2 transition-transform duration-200 group-hover:-translate-x-1" />
                     Sign Out
                   </Button>
                 ) : (
                   <Button
                     onClick={() => navigate('/signin')}
                     variant="outline"
-                    className="w-full rounded-xl py-4"
+                    className="w-full rounded-xl py-4 group"
                   >
-                    Sign In
+                    <span className="transition-transform duration-200 group-hover:translate-x-1">Sign In →</span>
                   </Button>
                 )}
               </div>
@@ -743,7 +744,7 @@ const Settings = () => {
           {/* Save Button */}
           <Button
             onClick={() => toast.success('Settings saved!')}
-            className="w-full rounded-2xl py-6 bg-[hsl(var(--primary))] hover:bg-[hsl(var(--primary))]/90 text-primary-foreground"
+            className="w-full rounded-2xl py-6 bg-[hsl(var(--primary))] hover:bg-[hsl(var(--primary))]/90 text-primary-foreground hover-lift"
           >
             Save
           </Button>
