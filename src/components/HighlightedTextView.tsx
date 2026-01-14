@@ -181,8 +181,8 @@ export function HighlightedTextView({
               }
             }}
             className={cn(
-              "cursor-pointer transition-all duration-100 rounded px-0.5",
-              isActiveWord && "font-semibold",
+              "cursor-pointer transition-all duration-100",
+              isActiveWord && "font-semibold rounded px-0.5 -mx-0.5",
               span.hasSpellError && "spell-error",
               span.hasGrammarError && "grammar-error",
               !isActiveWord && !isActiveSentence && !span.hasSpellError && !span.hasGrammarError && 
