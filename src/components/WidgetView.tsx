@@ -1,7 +1,7 @@
 import { useState, useRef, useCallback, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
-import { Mic, Square, Loader2, X, Trash2, Maximize2, Minimize2, ArrowLeft, Send, Clipboard, Keyboard } from 'lucide-react';
+import { Mic, Square, Loader2, X, Trash2, Maximize2, Minimize2, ArrowLeft, Send, Clipboard, Keyboard, Volume2, Settings, Check } from 'lucide-react';
 import { toast } from 'sonner';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
@@ -11,6 +11,9 @@ import { loadWhisperModel, transcribeAudio, isWhisperLoaded, WhisperProgressCall
 import { useKeyboardShortcuts, formatShortcut } from '@/hooks/useKeyboardShortcuts';
 import { ShortcutSettings } from './ShortcutSettings';
 import { processVoiceCommands } from '@/utils/voiceCommands';
+import { MultiActionButton } from './MultiActionButton';
+import { WidgetReadMode } from './WidgetReadMode';
+import { useSwipeGesture } from '@/hooks/useSwipeGesture';
 
 // Type result from Tauri commands
 interface TypeResult {
@@ -95,6 +98,8 @@ export const WidgetView = () => {
   const [partialText, setPartialText] = useState('');
   const [lastTranscription, setLastTranscription] = useState('');
   const [isExpanded, setIsExpanded] = useState(false);
+  const [showReadMode, setShowReadMode] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
   
   // Model status
   const [modelStatus, setModelStatus] = useState<'loading' | 'ready' | 'error'>('loading');
@@ -107,6 +112,10 @@ export const WidgetView = () => {
     const saved = localStorage.getItem('widget-auto-type');
     return saved !== null ? saved === 'true' : true;
   });
+  
+  // Undo stack for swipe gestures
+  const [undoStack, setUndoStack] = useState<string[]>([]);
+  const [redoStack, setRedoStack] = useState<string[]>([]);
   
   // Tauri API ref
   const tauriAPIRef = useRef<Awaited<ReturnType<typeof getTauriAPI>>>(null);
@@ -225,6 +234,13 @@ export const WidgetView = () => {
 
     try {
       audioChunksRef.current = [];
+      
+      // Save current transcription to undo stack
+      if (lastTranscription) {
+        setUndoStack(prev => [...prev, lastTranscription]);
+        setRedoStack([]);
+      }
+      
       setLastTranscription('');
       setPartialText('');
 
@@ -334,9 +350,13 @@ export const WidgetView = () => {
   }, [isRecording, modelStatus, voskReady, handleVoskResult, autoTypeEnabled]);
 
   const handleDelete = useCallback(() => {
+    if (lastTranscription) {
+      setUndoStack(prev => [...prev, lastTranscription]);
+      setRedoStack([]);
+    }
     setLastTranscription('');
     toast.success('Cleared');
-  }, []);
+  }, [lastTranscription]);
 
   const handleReplace = useCallback(async () => {
     if (lastTranscription) {
@@ -381,6 +401,29 @@ export const WidgetView = () => {
     toast.success('Copied to clipboard');
   }, [lastTranscription]);
   
+  // Undo/Redo for swipe gestures
+  const handleUndo = useCallback(() => {
+    if (undoStack.length === 0) return;
+    const previous = undoStack[undoStack.length - 1];
+    setUndoStack(prev => prev.slice(0, -1));
+    if (lastTranscription) {
+      setRedoStack(prev => [...prev, lastTranscription]);
+    }
+    setLastTranscription(previous);
+    toast.success('Undone');
+  }, [undoStack, lastTranscription]);
+  
+  const handleRedo = useCallback(() => {
+    if (redoStack.length === 0) return;
+    const next = redoStack[redoStack.length - 1];
+    setRedoStack(prev => prev.slice(0, -1));
+    if (lastTranscription) {
+      setUndoStack(prev => [...prev, lastTranscription]);
+    }
+    setLastTranscription(next);
+    toast.success('Redone');
+  }, [redoStack, lastTranscription]);
+  
   // Navigate back
   const handleBack = useCallback(() => {
     navigate('/settings');
@@ -415,6 +458,13 @@ export const WidgetView = () => {
       unsubscribeStop?.();
     };
   }, [toggleRecording, isRecording]);
+
+  // Swipe gesture handlers for compact mode
+  const { handlers: swipeHandlers } = useSwipeGesture({
+    onSwipeUp: handleUndo,
+    onSwipeDown: handleRedo,
+    threshold: 40
+  });
 
   // Drag handlers
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
@@ -461,8 +511,16 @@ export const WidgetView = () => {
       handleBack();
     }
   }, [handleBack]);
+  
+  // Handle minimize to tray
+  const handleMinimizeToTray = useCallback(async () => {
+    const api = tauriAPIRef.current;
+    if (api) {
+      await api.minimizeWindow();
+    }
+  }, []);
 
-  // Compact floating mode - just 3 buttons + settings
+  // Compact floating mode with 4 multi-action buttons
   if (!isExpanded && !isRecording && modelStatus === 'ready') {
     return (
       <div 
@@ -473,87 +531,98 @@ export const WidgetView = () => {
           zIndex: 9999
         }}
         onMouseDown={handleMouseDown}
+        {...swipeHandlers}
       >
-        <div className="flex items-center justify-center gap-2 px-3 py-2">
-          {/* Back button */}
-          <Button
-            onClick={(e) => { e.stopPropagation(); handleBack(); }}
-            variant="ghost"
-            size="icon"
-            className="h-8 w-8 rounded-full opacity-50 hover:opacity-100 transition-opacity"
-            title="Back to app"
-          >
-            <ArrowLeft className="h-4 w-4" />
-          </Button>
-
-          {/* Mic button */}
-          <Button
-            onClick={(e) => { e.stopPropagation(); toggleRecording(); }}
-            variant="ghost"
-            size="icon"
-            className="h-10 w-10 rounded-full hover:bg-primary hover:text-primary-foreground transition-colors"
-            title={`Start dictation (${formatShortcut(shortcuts.mic)})`}
-          >
-            <Mic className="h-5 w-5" />
-          </Button>
-
-          {/* Delete button */}
-          <Button
-            onClick={(e) => { e.stopPropagation(); handleDelete(); }}
-            variant="ghost"
-            size="icon"
-            className="h-10 w-10 rounded-full hover:bg-destructive hover:text-destructive-foreground transition-colors"
-            title={`Clear last transcription (${formatShortcut(shortcuts.delete)})`}
-            disabled={!lastTranscription}
-          >
-            <Trash2 className="h-5 w-5" />
-          </Button>
-
-          {/* Send to app / Copy button */}
-          <Button
-            onClick={(e) => { e.stopPropagation(); handleSendToApp(); }}
-            variant="ghost"
-            size="icon"
-            className="h-10 w-10 rounded-full hover:bg-accent hover:text-accent-foreground transition-colors"
-            title={isDesktopApp ? "Send to active app" : "Copy to clipboard"}
-            disabled={!lastTranscription}
-          >
-            {isDesktopApp ? <Send className="h-5 w-5" /> : <Clipboard className="h-5 w-5" />}
-          </Button>
-
-          {/* Auto-type indicator (Desktop only) */}
-          {isDesktopApp && (
-            <Button
-              onClick={(e) => { e.stopPropagation(); setAutoTypeEnabled(!autoTypeEnabled); }}
-              variant="ghost"
-              size="icon"
-              className={`h-8 w-8 rounded-full transition-colors ${autoTypeEnabled ? 'text-primary bg-primary/10' : 'opacity-50'}`}
-              title={autoTypeEnabled ? "Auto-type ON (click to disable)" : "Auto-type OFF (click to enable)"}
-            >
-              <Keyboard className="h-4 w-4" />
-            </Button>
-          )}
-
-          {/* Settings button */}
-          <div onClick={(e) => e.stopPropagation()}>
+        {/* Read Mode Overlay */}
+        {showReadMode && lastTranscription && (
+          <WidgetReadMode
+            text={lastTranscription}
+            onClose={() => setShowReadMode(false)}
+            onTextChange={setLastTranscription}
+          />
+        )}
+        
+        {/* Settings Sheet */}
+        {showSettings && (
+          <div className="absolute bottom-full left-0 right-0 mb-2 p-3 bg-card rounded-xl border border-border shadow-lg" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-xs font-medium">Settings</span>
+              <Button variant="ghost" size="icon" className="h-5 w-5" onClick={() => setShowSettings(false)}>
+                <X className="h-3 w-3" />
+              </Button>
+            </div>
             <ShortcutSettings
               shortcuts={shortcuts}
               onUpdateShortcut={updateShortcut}
               onReset={resetShortcuts}
             />
           </div>
-
-          {/* Expand button */}
-          <Button
-            onClick={(e) => { e.stopPropagation(); setIsExpanded(true); }}
+        )}
+        
+        <div className="flex items-center justify-center gap-1.5 px-2 py-1.5">
+          {/* Button 1: Main Action (Mic/Speaker) */}
+          <MultiActionButton
+            icon={<Mic className="h-5 w-5" />}
+            activeIcon={<Volume2 className="h-5 w-5" />}
+            isActive={showReadMode}
+            size="md"
+            variant="default"
+            onTap={toggleRecording}
+            onLongPress={() => lastTranscription && setShowReadMode(true)}
+            tooltip="Start dictation"
+            longPressTooltip="Open Read Mode"
+            disabled={isProcessing}
+          />
+          
+          {/* Button 2: Text Action (Send/Copy/Clear) */}
+          <MultiActionButton
+            icon={isDesktopApp ? <Send className="h-5 w-5" /> : <Clipboard className="h-5 w-5" />}
+            size="md"
+            variant={lastTranscription ? 'primary' : 'ghost'}
+            onTap={handleSendToApp}
+            onLongPress={handleCopyToClipboard}
+            onDoubleTap={handleDelete}
+            tooltip={isDesktopApp ? "Send to app" : "Copy"}
+            longPressTooltip="Copy to clipboard"
+            doubleTapTooltip="Clear text"
+            disabled={!lastTranscription}
+          />
+          
+          {/* Button 3: Mode Toggle (Auto-type/Settings) */}
+          {isDesktopApp && (
+            <MultiActionButton
+              icon={<Keyboard className="h-4 w-4" />}
+              activeIcon={<Check className="h-4 w-4" />}
+              isActive={autoTypeEnabled}
+              size="sm"
+              variant={autoTypeEnabled ? 'primary' : 'ghost'}
+              onTap={() => setAutoTypeEnabled(!autoTypeEnabled)}
+              onLongPress={() => setShowSettings(true)}
+              tooltip={autoTypeEnabled ? "Auto-type ON" : "Auto-type OFF"}
+              longPressTooltip="Open settings"
+            />
+          )}
+          
+          {/* Button 4: Window Control (Expand/Close/Minimize) */}
+          <MultiActionButton
+            icon={<Maximize2 className="h-4 w-4" />}
+            size="sm"
             variant="ghost"
-            size="icon"
-            className="h-8 w-8 rounded-full opacity-50 hover:opacity-100 transition-opacity"
-            title="Expand view"
-          >
-            <Maximize2 className="h-4 w-4" />
-          </Button>
+            onTap={() => setIsExpanded(true)}
+            onLongPress={handleCloseWindow}
+            onDoubleTap={handleMinimizeToTray}
+            tooltip="Expand"
+            longPressTooltip="Close widget"
+            doubleTapTooltip="Minimize to tray"
+          />
         </div>
+        
+        {/* Transcription preview tooltip */}
+        {lastTranscription && !showReadMode && (
+          <div className="absolute top-full left-1/2 -translate-x-1/2 mt-1 px-2 py-1 bg-card/95 rounded-md border border-border/50 shadow-sm max-w-[200px]">
+            <p className="text-[10px] text-muted-foreground line-clamp-1">{lastTranscription}</p>
+          </div>
+        )}
       </div>
     );
   }
@@ -714,6 +783,15 @@ export const WidgetView = () => {
                         variant="ghost"
                         size="icon"
                         className="h-5 w-5"
+                        onClick={() => setShowReadMode(true)}
+                        title="Read Mode"
+                      >
+                        <Volume2 className="h-3 w-3" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-5 w-5"
                         onClick={handleCopyToClipboard}
                         title="Copy to clipboard"
                       >
@@ -764,6 +842,15 @@ export const WidgetView = () => {
           </>
         )}
       </div>
+      
+      {/* Read Mode Overlay */}
+      {showReadMode && lastTranscription && (
+        <WidgetReadMode
+          text={lastTranscription}
+          onClose={() => setShowReadMode(false)}
+          onTextChange={setLastTranscription}
+        />
+      )}
     </div>
   );
 };
