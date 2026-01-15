@@ -64,9 +64,31 @@ sudo dnf install webkit2gtk4.1-devel openssl-devel libxdo-devel \
 ```
 
 **Windows:**
-Install [Visual Studio Build Tools](https://visualstudio.microsoft.com/visual-cpp-build-tools/) with:
-- "Desktop development with C++"
-- Windows 10/11 SDK
+
+1. Install [Visual Studio Build Tools](https://visualstudio.microsoft.com/visual-cpp-build-tools/) with:
+   - "Desktop development with C++"
+   - Windows 10/11 SDK
+
+2. Install [WebView2](https://developer.microsoft.com/en-us/microsoft-edge/webview2/) (usually pre-installed on Windows 10/11)
+
+3. **(Optional) For Native Whisper Support - Install LLVM:**
+   ```powershell
+   # Option A: Using winget (recommended)
+   winget install LLVM.LLVM
+   
+   # Option B: Using Chocolatey
+   choco install llvm
+   
+   # Option C: Manual download from https://releases.llvm.org/
+   ```
+   
+   After installing LLVM, set the environment variable:
+   ```powershell
+   # Add to your system environment variables
+   setx LIBCLANG_PATH "C:\Program Files\LLVM\bin"
+   ```
+   
+   Restart your terminal after setting the environment variable.
 
 ### Build Steps
 
@@ -111,6 +133,25 @@ Build the app for distribution:
 ```bash
 npm run tauri build
 ```
+
+#### Step 5: (Optional) Build with Native Whisper
+
+For better transcription performance using native Whisper instead of WASM:
+
+**Prerequisites:**
+- LLVM/Clang installed (see Windows instructions above)
+- `LIBCLANG_PATH` environment variable set
+
+```bash
+# Build with native Whisper feature enabled
+cd src-tauri
+cargo build --release --features native-whisper
+
+# Or build the full Tauri app with native Whisper
+npm run tauri build -- --features native-whisper
+```
+
+**Note:** Native Whisper is optional. The app falls back to WASM Whisper automatically if native is not available.
 
 ### Build Outputs
 
@@ -194,6 +235,37 @@ If Whisper falls back to CPU mode (WASM), ensure:
 Install all required dependencies:
 ```bash
 sudo apt install libwebkit2gtk-4.1-dev libxdo-dev libayatana-appindicator3-dev
+```
+
+#### Native Whisper Build Fails on Windows
+If you get errors about `libclang` or `whisper-rs`:
+
+1. **Ensure LLVM is installed:**
+   ```powershell
+   winget install LLVM.LLVM
+   ```
+
+2. **Set LIBCLANG_PATH:**
+   ```powershell
+   setx LIBCLANG_PATH "C:\Program Files\LLVM\bin"
+   ```
+
+3. **Restart your terminal** and verify:
+   ```powershell
+   echo %LIBCLANG_PATH%
+   clang --version
+   ```
+
+4. **If still failing**, build without native Whisper (uses WASM fallback):
+   ```bash
+   npm run tauri build
+   ```
+
+#### Missing Icon Files
+If you see errors about missing `.ico` or `.icns` files:
+```bash
+# Generate all required icons from the base PNG
+npx tauri icon src-tauri/icons/icon.png
 ```
 
 For more detailed troubleshooting, see [docs/TAURI_SETUP.md](docs/TAURI_SETUP.md).
