@@ -245,19 +245,40 @@ export class VoskRecognizer {
     }
 
     try {
-      const audioConstraints: MediaTrackConstraints = {
-        echoCancellation: true,
-        noiseSuppression: true,
-        autoGainControl: true,
-      };
+      // Try to get stream with saved device, fallback to default
+      let stream: MediaStream;
+      try {
+        const audioConstraints: MediaTrackConstraints = {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true,
+        };
 
-      if (this.deviceId) {
-        audioConstraints.deviceId = { exact: this.deviceId };
+        if (this.deviceId) {
+          audioConstraints.deviceId = { exact: this.deviceId };
+        }
+
+        stream = await navigator.mediaDevices.getUserMedia({
+          audio: audioConstraints
+        });
+      } catch (deviceError: any) {
+        // If specific device failed, try default microphone
+        if (this.deviceId) {
+          console.warn(`[VOSK] Saved microphone (${this.deviceId}) not available, using default`);
+          localStorage.removeItem('selectedMicrophoneId');
+          stream = await navigator.mediaDevices.getUserMedia({
+            audio: {
+              echoCancellation: true,
+              noiseSuppression: true,
+              autoGainControl: true,
+            }
+          });
+        } else {
+          throw deviceError;
+        }
       }
-
-      this.mediaStream = await navigator.mediaDevices.getUserMedia({
-        audio: audioConstraints
-      });
+      
+      this.mediaStream = stream;
       this.ownsStream = true; // We created this stream
       
       await this.initAudioProcessing();
