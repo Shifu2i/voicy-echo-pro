@@ -108,13 +108,35 @@ export const VoiceCommandRecorder = ({
       setLastAction('');
 
       const deviceId = getSelectedMicrophoneId();
-      const audioConstraints: MediaTrackConstraints = {
-        echoCancellation: true,
-        noiseSuppression: true,
-        autoGainControl: true
-      };
-      if (deviceId) {
-        audioConstraints.deviceId = { exact: deviceId };
+      
+      // Try to get stream with saved device, fallback to default
+      let stream: MediaStream;
+      try {
+        const audioConstraints: MediaTrackConstraints = {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true,
+        };
+        if (deviceId) {
+          audioConstraints.deviceId = { exact: deviceId };
+        }
+        stream = await navigator.mediaDevices.getUserMedia({ audio: audioConstraints });
+      } catch (deviceError: any) {
+        // If specific device failed, try default microphone
+        if (deviceId) {
+          console.warn(`Saved microphone (${deviceId}) not available, using default`);
+          localStorage.removeItem('selectedMicrophoneId');
+          stream = await navigator.mediaDevices.getUserMedia({
+            audio: {
+              echoCancellation: true,
+              noiseSuppression: true,
+              autoGainControl: true,
+            }
+          });
+          toast.info('Saved microphone unavailable - using default');
+        } else {
+          throw deviceError;
+        }
       }
 
       if (voskReady) {
@@ -122,7 +144,6 @@ export const VoiceCommandRecorder = ({
         await recognizerRef.current.start();
       }
 
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: audioConstraints });
       setAudioStream(stream);
       
       const mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm' });
@@ -140,9 +161,13 @@ export const VoiceCommandRecorder = ({
     } catch (error: any) {
       console.error('Error starting recording:', error);
       if (error.name === 'NotAllowedError') {
-        toast.error('Microphone access denied');
+        toast.error('Microphone access denied. Please allow microphone in browser settings.');
+      } else if (error.name === 'NotFoundError') {
+        toast.error('No microphone found. Please connect a microphone.');
+      } else if (error.name === 'NotReadableError') {
+        toast.error('Microphone is in use by another application.');
       } else {
-        toast.error('Could not start recording');
+        toast.error('Could not start recording: ' + (error.message || 'Unknown error'));
       }
     }
   };
