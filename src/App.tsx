@@ -1,9 +1,11 @@
+import { useEffect } from "react";
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { AuthProvider } from "@/contexts/AuthContext";
+import { validateSavedMicrophone } from "@/utils/microphoneUtils";
 import Splash from "./pages/Splash";
 import Index from "./pages/Index";
 import Edit from "./pages/Edit";
@@ -16,7 +18,13 @@ import WidgetView from "./components/WidgetView";
 
 const queryClient = new QueryClient();
 
-const App = () => (
+const App = () => {
+  // Validate saved microphone on app startup to prevent recording errors
+  useEffect(() => {
+    validateSavedMicrophone();
+  }, []);
+
+  return (
   <QueryClientProvider client={queryClient}>
     <AuthProvider>
       <TooltipProvider>
@@ -39,6 +47,7 @@ const App = () => (
       </TooltipProvider>
     </AuthProvider>
   </QueryClientProvider>
-);
+  );
+};
 
 export default App;
