@@ -1,6 +1,7 @@
 import { Button } from "@/components/ui/button";
 import { Sparkles, Briefcase, MessageCircle, CheckCircle2, Maximize2, Minimize2 } from "lucide-react";
 import { toast } from "sonner";
+import { supabase } from "@/integrations/supabase/client";
 
 interface EditCommandsProps {
   text: string;
@@ -15,17 +16,29 @@ export const EditCommands = ({ text, onEditComplete }: EditCommandsProps) => {
     }
 
     try {
+      // Check if user is authenticated
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.access_token) {
+        toast.error("Please sign in to use AI editing features");
+        return;
+      }
+
       toast.loading(`Applying "${label}" edit...`);
 
       const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/edit-text`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
+          "Authorization": `Bearer ${session.access_token}`,
         },
         body: JSON.stringify({ text, instruction }),
       });
 
       if (!response.ok) {
+        if (response.status === 401) {
+          toast.error("Session expired. Please sign in again.");
+          return;
+        }
         throw new Error("Edit failed");
       }
 
