@@ -1,5 +1,6 @@
 import { createModel, KaldiRecognizer, Model } from 'vosk-browser';
 import { getModelConfig, getModelSize, getVoskProxyUrl, ModelSize } from '@/utils/modelConfig';
+import { supabase } from '@/integrations/supabase/client';
 
 let model: Model | null = null;
 let isModelLoading = false;
@@ -72,10 +73,18 @@ const ESTIMATED_MODEL_SIZES: Record<string, number> = {
   'vosk-model-en-us-0.22': 1800 * 1024 * 1024, // 1.8 GB
 };
 
-const fetchModelDirect = async (modelUrl: string, modelKey: string, onProgress?: ProgressCallback): Promise<ArrayBuffer> => {
+const fetchModelDirect = async (modelUrl: string, modelKey: string, authToken: string, onProgress?: ProgressCallback): Promise<ArrayBuffer> => {
   console.log(`[VOSK] Fetching from: ${modelUrl}`);
   
-  const response = await fetch(modelUrl);
+  const response = await fetch(modelUrl, {
+    headers: {
+      'Authorization': `Bearer ${authToken}`,
+    },
+  });
+  
+  if (response.status === 401) {
+    throw new Error('Authentication required. Please sign in to download the voice model.');
+  }
   
   if (!response.ok) throw new Error(`Failed to download model: ${response.status}`);
   
@@ -169,8 +178,14 @@ export const loadModel = async (onProgress?: ProgressCallback): Promise<Model> =
       console.log(`[VOSK] Found cached model: ${modelKey}`);
       if (onProgress) onProgress({ loaded: 100, total: 100, percent: 100 });
     } else {
+      // Get auth token for authenticated proxy request
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.access_token) {
+        throw new Error('Please sign in to download voice models');
+      }
+      
       console.log(`[VOSK] Downloading model via proxy: ${proxyUrl}`);
-      modelData = await fetchModelDirect(proxyUrl, modelKey, onProgress);
+      modelData = await fetchModelDirect(proxyUrl, modelKey, session.access_token, onProgress);
       await cacheModel(modelKey, modelData);
       console.log(`[VOSK] Model cached: ${modelKey}`);
     }
