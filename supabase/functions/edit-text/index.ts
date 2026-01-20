@@ -44,13 +44,44 @@ serve(async (req) => {
     const userId = claimsData.claims.sub;
     console.log('Authenticated user:', userId);
 
-    const { text, instruction } = await req.json();
+    const body = await req.json();
+    const { text, instruction } = body;
     
-    if (!text || !instruction) {
-      throw new Error('Text and instruction are required');
+    // Validate input types
+    if (typeof text !== 'string' || typeof instruction !== 'string') {
+      return new Response(
+        JSON.stringify({ error: 'Text and instruction must be strings' }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
     }
 
-    console.log('Processing edit request for user:', userId, 'instruction:', instruction);
+    // Validate inputs are not empty
+    if (!text.trim() || !instruction.trim()) {
+      return new Response(
+        JSON.stringify({ error: 'Text and instruction are required' }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    // Validate input lengths to prevent abuse
+    const MAX_TEXT_LENGTH = 50000;
+    const MAX_INSTRUCTION_LENGTH = 500;
+    
+    if (text.length > MAX_TEXT_LENGTH) {
+      return new Response(
+        JSON.stringify({ error: `Text exceeds maximum length of ${MAX_TEXT_LENGTH} characters` }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+    
+    if (instruction.length > MAX_INSTRUCTION_LENGTH) {
+      return new Response(
+        JSON.stringify({ error: `Instruction exceeds maximum length of ${MAX_INSTRUCTION_LENGTH} characters` }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    console.log('Processing edit request for user:', userId, 'instruction:', instruction.substring(0, 100));
 
     const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
     if (!LOVABLE_API_KEY) {

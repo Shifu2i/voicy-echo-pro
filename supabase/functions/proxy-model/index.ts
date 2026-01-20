@@ -1,4 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2"
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -21,6 +22,38 @@ serve(async (req) => {
   }
 
   try {
+    // Validate authentication
+    const authHeader = req.headers.get('Authorization');
+    if (!authHeader?.startsWith('Bearer ')) {
+      console.error('Missing or invalid authorization header');
+      return new Response(
+        JSON.stringify({ error: 'Unauthorized' }),
+        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    // Create Supabase client with the user's auth context
+    const supabaseClient = createClient(
+      Deno.env.get('SUPABASE_URL')!,
+      Deno.env.get('SUPABASE_ANON_KEY')!,
+      { global: { headers: { Authorization: authHeader } } }
+    );
+
+    // Validate the JWT token and get user claims
+    const token = authHeader.replace('Bearer ', '');
+    const { data: claimsData, error: claimsError } = await supabaseClient.auth.getClaims(token);
+    
+    if (claimsError || !claimsData?.claims) {
+      console.error('JWT validation failed:', claimsError?.message);
+      return new Response(
+        JSON.stringify({ error: 'Unauthorized' }),
+        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    const userId = claimsData.claims.sub;
+    console.log('Authenticated user for model proxy:', userId);
+
     const url = new URL(req.url);
     const modelParam = url.searchParams.get('model');
     
@@ -29,6 +62,7 @@ serve(async (req) => {
     
     // Validate model is in allowed list
     if (!ALLOWED_MODELS.includes(modelFile)) {
+      console.error('Invalid model requested:', modelFile);
       return new Response(
         JSON.stringify({ error: 'Invalid model specified' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
@@ -36,7 +70,7 @@ serve(async (req) => {
     }
     
     const modelUrl = `${MODEL_BASE_URL}${modelFile}`;
-    console.log(`Proxying model: ${modelUrl}`);
+    console.log(`Proxying model for user ${userId}: ${modelUrl}`);
 
     // Forward range header for resumable downloads
     const rangeHeader = req.headers.get('range');
