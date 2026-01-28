@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback } from 'react';
+import { useState, useRef, useCallback, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Mic, Square, Loader2, Download, Clock, Check, FileDown } from 'lucide-react';
 import { toast } from 'sonner';
@@ -16,7 +16,10 @@ export const VoiceRecorder = ({ onTranscription }: VoiceRecorderProps) => {
   const [isRecording, setIsRecording] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [partialText, setPartialText] = useState('');
-  const [modelStatus, setModelStatus] = useState<'idle' | 'loading' | 'ready' | 'error'>('idle');
+  // Check if models are already loaded on mount
+  const [modelStatus, setModelStatus] = useState<'idle' | 'loading' | 'ready' | 'error'>(() => 
+    isWhisperLoaded() ? 'ready' : 'idle'
+  );
   const [loadProgress, setLoadProgress] = useState(0);
   const [loadedBytes, setLoadedBytes] = useState(0);
   const [totalBytes, setTotalBytes] = useState(0);
@@ -24,13 +27,22 @@ export const VoiceRecorder = ({ onTranscription }: VoiceRecorderProps) => {
   const [currentFile, setCurrentFile] = useState<string>('');
   const [fileProgress, setFileProgress] = useState<FileProgress[]>([]);
   const [voskReady, setVoskReady] = useState(isModelLoaded());
-  const [whisperDevice, setWhisperDevice] = useState<'webgpu' | 'wasm' | 'native'>('wasm');
+  const [whisperDevice, setWhisperDevice] = useState<'webgpu' | 'wasm' | 'native'>(() => getActiveDevice());
   const [audioStream, setAudioStream] = useState<MediaStream | null>(null);
   
   const recognizerRef = useRef<VoskRecognizer | null>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
   const voskLoadingRef = useRef(false);
+
+  // Sync state with module-level model state on mount (persists across navigation)
+  useEffect(() => {
+    if (isWhisperLoaded()) {
+      setModelStatus('ready');
+      setWhisperDevice(getActiveDevice());
+    }
+    setVoskReady(isModelLoaded());
+  }, []);
 
   // Load models on demand - load Vosk in parallel for fast preview
   const loadModels = async () => {
