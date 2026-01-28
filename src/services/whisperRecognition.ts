@@ -1,11 +1,17 @@
 import { pipeline, AutomaticSpeechRecognitionPipeline } from '@huggingface/transformers';
-import { getModelConfig, getModelSize, ModelSize } from '@/utils/modelConfig';
+import { 
+  getModelConfig, 
+  getModelTier, 
+  checkWebGPUSupport, 
+  getDtypeForDevice,
+  ModelTier 
+} from '@/utils/modelConfig';
 
 let transcriber: AutomaticSpeechRecognitionPipeline | null = null;
 let whisperLoading = false;
 let whisperLoadPromise: Promise<AutomaticSpeechRecognitionPipeline | null> | null = null;
 let activeDevice: 'webgpu' | 'wasm' | 'native' = 'wasm';
-let loadedModelSize: ModelSize | null = null;
+let loadedModelTier: ModelTier | null = null;
 let usingNative = false;
 
 // Check if running in Tauri
@@ -49,13 +55,13 @@ export type WhisperProgressCallback = (progress: WhisperProgress) => void;
 export const clearWhisperModel = (): void => {
   transcriber = null;
   whisperLoadPromise = null;
-  loadedModelSize = null;
+  loadedModelTier = null;
   usingNative = false;
 };
 
-// Check if model needs reload due to size change
+// Check if model needs reload due to tier change
 export const whisperNeedsReload = (): boolean => {
-  return loadedModelSize !== null && loadedModelSize !== getModelSize();
+  return loadedModelTier !== null && loadedModelTier !== getModelTier();
 };
 
 // Check if native Whisper is available and loaded
@@ -68,12 +74,12 @@ export const isNativeWhisperAvailable = async (): Promise<boolean> => {
   }
 };
 
-// Desktop app - prioritize native Whisper, fallback to WASM
+// Load Whisper model with WebGPU acceleration when available
 export const loadWhisperModel = async (onProgress?: WhisperProgressCallback): Promise<AutomaticSpeechRecognitionPipeline | null> => {
-  const currentSize = getModelSize();
+  const currentTier = getModelTier();
   
-  // If model size changed, clear the old model
-  if (loadedModelSize !== null && loadedModelSize !== currentSize) {
+  // If tier changed, clear the old model
+  if (loadedModelTier !== null && loadedModelTier !== currentTier) {
     clearWhisperModel();
   }
   
@@ -99,14 +105,14 @@ export const loadWhisperModel = async (onProgress?: WhisperProgressCallback): Pr
       
       usingNative = true;
       activeDevice = 'native';
-      loadedModelSize = currentSize;
+      loadedModelTier = currentTier;
       
       console.log('[Whisper] Native model loaded successfully');
       onProgress?.({ status: 'ready', overallProgress: 100, device: 'native', files: [] });
       
       return null;
     } catch (err) {
-      console.warn('[Whisper] Native loading failed, falling back to WASM:', err);
+      console.warn('[Whisper] Native loading failed, falling back to browser:', err);
     }
   }
 
@@ -115,9 +121,14 @@ export const loadWhisperModel = async (onProgress?: WhisperProgressCallback): Pr
   const modelId = config.whisper.modelId;
 
   whisperLoadPromise = (async () => {
-    activeDevice = 'wasm';
-    console.log(`[Whisper] Loading ${modelId} on WASM (CPU)`);
-    onProgress?.({ status: 'downloading', progress: 0, overallProgress: 0, device: 'wasm', files: [] });
+    // Check WebGPU support
+    const hasWebGPU = await checkWebGPUSupport();
+    const device: 'webgpu' | 'wasm' = hasWebGPU ? 'webgpu' : 'wasm';
+    const dtype = getDtypeForDevice(device, config.whisper);
+    
+    activeDevice = device;
+    console.log(`[Whisper] Loading ${modelId} on ${device.toUpperCase()} with ${dtype}`);
+    onProgress?.({ status: 'downloading', progress: 0, overallProgress: 0, device, files: [] });
 
     const downloadStartTime = Date.now();
     const filesMap = new Map<string, FileProgress>();
@@ -184,7 +195,7 @@ export const loadWhisperModel = async (onProgress?: WhisperProgressCallback): Pr
         progress: typeof data.progress === 'number' ? Math.round(data.progress) : undefined,
         overallProgress: calculateOverallProgress(),
         file: fileName,
-        device: 'wasm',
+        device,
         loaded: loadedBytes,
         total: totalBytes,
         estimatedTimeRemaining,
@@ -197,16 +208,42 @@ export const loadWhisperModel = async (onProgress?: WhisperProgressCallback): Pr
         'automatic-speech-recognition',
         modelId,
         {
-          device: 'wasm',
-          dtype: config.whisper.cpuDtype as 'fp32' | 'q8',
+          device,
+          dtype: dtype as 'fp16' | 'fp32' | 'q8',
           progress_callback: progressCallback,
         }
       );
       
-      console.log('[Whisper] Model loaded successfully on WASM (CPU)');
-      onProgress?.({ status: 'ready', overallProgress: 100, device: 'wasm', files: Array.from(filesMap.values()) });
+      console.log(`[Whisper] Model loaded successfully on ${device.toUpperCase()} with ${dtype}`);
+      onProgress?.({ status: 'ready', overallProgress: 100, device, files: Array.from(filesMap.values()) });
       return pipe;
     } catch (error) {
+      // If WebGPU fails, try falling back to WASM
+      if (device === 'webgpu') {
+        console.warn('[Whisper] WebGPU failed, falling back to WASM:', error);
+        activeDevice = 'wasm';
+        
+        try {
+          const fallbackDtype = getDtypeForDevice('wasm', config.whisper);
+          const pipe = await pipeline(
+            'automatic-speech-recognition',
+            modelId,
+            {
+              device: 'wasm',
+              dtype: fallbackDtype as 'fp16' | 'fp32' | 'q8',
+              progress_callback: progressCallback,
+            }
+          );
+          
+          console.log('[Whisper] Model loaded successfully on WASM (fallback)');
+          onProgress?.({ status: 'ready', overallProgress: 100, device: 'wasm', files: Array.from(filesMap.values()) });
+          return pipe;
+        } catch (fallbackError) {
+          console.error('[Whisper] WASM fallback also failed:', fallbackError);
+          throw fallbackError;
+        }
+      }
+      
       console.error('[Whisper] Failed to load model:', error);
       throw error;
     }
@@ -214,7 +251,7 @@ export const loadWhisperModel = async (onProgress?: WhisperProgressCallback): Pr
 
   try {
     transcriber = await whisperLoadPromise;
-    loadedModelSize = currentSize;
+    loadedModelTier = currentTier;
     whisperLoading = false;
     return transcriber;
   } catch (error) {
@@ -228,6 +265,7 @@ export const isWhisperLoaded = (): boolean => transcriber !== null || usingNativ
 export const isWhisperLoading = (): boolean => whisperLoading;
 export const getActiveDevice = (): 'webgpu' | 'wasm' | 'native' => activeDevice;
 export const isUsingNative = (): boolean => usingNative;
+export const getLoadedModelTier = (): ModelTier | null => loadedModelTier;
 
 // Reusable audio context for transcription
 let sharedAudioContext: AudioContext | null = null;

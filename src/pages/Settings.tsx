@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Menu, LogOut, Mic, Keyboard, Trash2, RefreshCw, RotateCcw, ExternalLink, Volume2, Play, Zap, Gauge, Send, ClipboardPaste, Type, EyeOff } from 'lucide-react';
+import { Menu, LogOut, Mic, Keyboard, Trash2, RefreshCw, RotateCcw, ExternalLink, Volume2, Play, Zap, Gauge, Send, ClipboardPaste, Type, EyeOff, Cpu, Crown, Sparkles, Timer } from 'lucide-react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { SideMenu } from '@/components/SideMenu';
 import { BottomTabs } from '@/components/BottomTabs';
@@ -15,8 +15,21 @@ import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { ShortcutConfig, formatShortcut, parseKeyEvent, DEFAULT_SHORTCUTS } from '@/hooks/useKeyboardShortcuts';
 import { getAvailableVoices, loadTTSSettings, saveTTSSettings, speak, TTSSettings } from '@/utils/textToSpeech';
-import { getModelSize, setModelSize, MODEL_CONFIGS, ModelSize } from '@/utils/modelConfig';
+import { 
+  getModelTier, 
+  setModelTier, 
+  MODEL_TIERS, 
+  ModelTier, 
+  checkWebGPUSupport, 
+  isWebGPUSupported,
+  // Legacy exports for compatibility
+  getModelSize, 
+  setModelSize, 
+  MODEL_CONFIGS, 
+  ModelSize 
+} from '@/utils/modelConfig';
 import { DictationInputSettings } from '@/components/DictationInputSettings';
+import { getActiveDevice, clearWhisperModel } from '@/services/whisperRecognition';
 
 // Reading background color options
 const DYSLEXIA_COLORS = [
@@ -82,6 +95,21 @@ const Settings = () => {
   });
   const [capturingKey, setCapturingKey] = useState<keyof ShortcutConfig | null>(null);
   const [capturedKeys, setCapturedKeys] = useState('');
+  
+  // Model tier and WebGPU state
+  const [currentTier, setCurrentTier] = useState<ModelTier>(getModelTier());
+  const [webGPUStatus, setWebGPUStatus] = useState<'checking' | 'supported' | 'unsupported'>('checking');
+  const [currentDevice, setCurrentDevice] = useState<'webgpu' | 'wasm' | 'native'>('wasm');
+  
+  // Check WebGPU support on mount
+  useEffect(() => {
+    const checkGPU = async () => {
+      const supported = await checkWebGPUSupport();
+      setWebGPUStatus(supported ? 'supported' : 'unsupported');
+      setCurrentDevice(getActiveDevice());
+    };
+    checkGPU();
+  }, []);
 
   const isValidHex = (hex: string) => /^#([A-Fa-f0-9]{6}|[A-Fa-f0-9]{3})$/.test(hex);
 
@@ -422,62 +450,109 @@ const Settings = () => {
             </div>
           </div>
 
-          {/* Voice Model Size */}
+          {/* Voice Model Settings */}
           <div className="bg-muted rounded-2xl p-4">
             <Label className="text-sm font-medium text-foreground flex items-center gap-2">
               <Gauge className="w-4 h-4" />
               Voice Recognition Model
             </Label>
             <p className="text-xs text-muted-foreground mt-1 mb-3">
-              Choose between speed or accuracy. Larger models require more download time.
+              Choose your preferred accuracy and speed balance
             </p>
             
+            {/* WebGPU Status Indicator */}
+            <div className={`flex items-center gap-2 p-3 rounded-xl mb-4 ${
+              webGPUStatus === 'supported' 
+                ? 'bg-primary/10 border border-primary/20' 
+                : webGPUStatus === 'unsupported'
+                  ? 'bg-muted-foreground/10 border border-muted-foreground/20'
+                  : 'bg-muted-foreground/5 border border-muted-foreground/10'
+            }`}>
+              {webGPUStatus === 'checking' ? (
+                <>
+                  <div className="w-4 h-4 border-2 border-muted-foreground/30 border-t-primary rounded-full animate-spin" />
+                  <span className="text-xs text-muted-foreground">Checking GPU acceleration...</span>
+                </>
+              ) : webGPUStatus === 'supported' ? (
+                <>
+                  <Zap className="w-4 h-4 text-primary" />
+                  <div className="flex-1">
+                    <span className="text-xs font-medium text-primary">WebGPU Accelerated</span>
+                    <p className="text-xs text-muted-foreground">10-100x faster processing enabled</p>
+                  </div>
+                  <span className="text-xs px-2 py-0.5 rounded-full bg-primary/20 text-primary font-medium">
+                    {currentDevice === 'webgpu' ? 'Active' : currentDevice === 'native' ? 'Native' : 'Available'}
+                  </span>
+                </>
+              ) : (
+                <>
+                  <Cpu className="w-4 h-4 text-muted-foreground" />
+                  <div className="flex-1">
+                    <span className="text-xs font-medium text-muted-foreground">CPU Mode (WASM)</span>
+                    <p className="text-xs text-muted-foreground/70">WebGPU not available in this browser</p>
+                  </div>
+                </>
+              )}
+            </div>
+            
+            {/* Model Tier Selection */}
             <div className="space-y-2">
-              <button
-                onClick={() => {
-                  setModelSize('small');
-                  toast.success('Model size set to Small. Reload models to apply.');
-                }}
-                className={`w-full p-3 rounded-xl border-2 text-left transition-all duration-200 active:scale-[0.98] ${
-                  getModelSize() === 'small' 
-                    ? 'border-primary bg-primary/10 shadow-md ring-pulse' 
-                    : 'border-transparent bg-background hover:border-muted-foreground/30 hover:shadow-sm'
-                }`}
-              >
-                <div className="flex items-center gap-2">
-                  <Zap className={`w-4 h-4 text-yellow-500 transition-transform duration-200 ${getModelSize() === 'small' ? 'scale-110' : ''}`} />
-                  <span className="font-medium text-sm">Small (Fast)</span>
-                </div>
-                <p className="text-xs text-muted-foreground mt-1">
-                  {MODEL_CONFIGS.small.vosk.displayName} ({MODEL_CONFIGS.small.vosk.size}) + {MODEL_CONFIGS.small.whisper.displayName} ({MODEL_CONFIGS.small.whisper.size})
-                </p>
-                <p className="text-xs text-muted-foreground">Best for slower connections. Quick download, good accuracy.</p>
-              </button>
-              
-              <button
-                onClick={() => {
-                  setModelSize('large');
-                  toast.success('Model size set to Large. Reload models to apply.');
-                }}
-                className={`w-full p-3 rounded-xl border-2 text-left transition-all duration-200 active:scale-[0.98] ${
-                  getModelSize() === 'large' 
-                    ? 'border-primary bg-primary/10 shadow-md ring-pulse' 
-                    : 'border-transparent bg-background hover:border-muted-foreground/30 hover:shadow-sm'
-                }`}
-              >
-                <div className="flex items-center gap-2">
-                  <Gauge className={`w-4 h-4 text-green-500 transition-transform duration-200 ${getModelSize() === 'large' ? 'scale-110' : ''}`} />
-                  <span className="font-medium text-sm">Large (Accurate)</span>
-                </div>
-                <p className="text-xs text-muted-foreground mt-1">
-                  {MODEL_CONFIGS.large.vosk.displayName} ({MODEL_CONFIGS.large.vosk.size}) + {MODEL_CONFIGS.large.whisper.displayName} ({MODEL_CONFIGS.large.whisper.size})
-                </p>
-                <p className="text-xs text-muted-foreground">Best accuracy. Requires ~3GB download on first use.</p>
-              </button>
+              {(Object.keys(MODEL_TIERS) as ModelTier[]).map((tier) => {
+                const config = MODEL_TIERS[tier];
+                const isSelected = currentTier === tier;
+                const isGPUOnly = config.gpuOnly && webGPUStatus !== 'supported';
+                
+                return (
+                  <button
+                    key={tier}
+                    onClick={() => {
+                      if (isGPUOnly) {
+                        toast.error('This model requires WebGPU which is not available');
+                        return;
+                      }
+                      setCurrentTier(tier);
+                      setModelTier(tier);
+                      clearWhisperModel();
+                      toast.success(`Model set to ${config.name}. Will load on next recording.`);
+                    }}
+                    disabled={isGPUOnly}
+                    className={`w-full p-3 rounded-xl border-2 text-left transition-all duration-200 active:scale-[0.98] ${
+                      isSelected 
+                        ? 'border-primary bg-primary/10 shadow-md' 
+                        : isGPUOnly
+                          ? 'border-transparent bg-background/50 opacity-50 cursor-not-allowed'
+                          : 'border-transparent bg-background hover:border-muted-foreground/30 hover:shadow-sm'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2">
+                      {tier === 'fast' && <Timer className={`w-4 h-4 text-yellow-500 ${isSelected ? 'scale-110' : ''}`} />}
+                      {tier === 'balanced' && <Gauge className={`w-4 h-4 text-blue-500 ${isSelected ? 'scale-110' : ''}`} />}
+                      {tier === 'performance' && <Zap className={`w-4 h-4 text-green-500 ${isSelected ? 'scale-110' : ''}`} />}
+                      {tier === 'maximum' && <Crown className={`w-4 h-4 text-purple-500 ${isSelected ? 'scale-110' : ''}`} />}
+                      <span className="font-medium text-sm">{config.name}</span>
+                      {config.recommended && webGPUStatus === 'supported' && (
+                        <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-primary/20 text-primary font-medium">
+                          Recommended
+                        </span>
+                      )}
+                      {config.gpuOnly && (
+                        <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-purple-500/20 text-purple-500 font-medium flex items-center gap-0.5">
+                          <Sparkles className="w-2.5 h-2.5" />
+                          GPU
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      {config.whisper.displayName} ({config.whisper.size})
+                    </p>
+                    <p className="text-xs text-muted-foreground/80">{config.description}</p>
+                  </button>
+                );
+              })}
             </div>
             
             <p className="text-xs text-muted-foreground mt-3 italic">
-              Changes take effect after reloading the app or clearing model cache.
+              Changes take effect on the next recording. Models are cached locally after download.
             </p>
           </div>
 
