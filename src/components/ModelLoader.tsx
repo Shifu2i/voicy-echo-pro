@@ -2,7 +2,8 @@ import { useState, useEffect } from 'react';
 import { Progress } from '@/components/ui/progress';
 import { Download, CheckCircle, Loader2, Cpu, Zap, Clock } from 'lucide-react';
 import { loadModel, isModelLoaded, VoskProgress } from '@/services/voskRecognition';
-import { getActiveDevice } from '@/services/whisperRecognition';
+import { getActiveDevice, getLoadedModelTier } from '@/services/whisperRecognition';
+import { getTierConfig, MODEL_TIERS } from '@/utils/modelConfig';
 
 interface ModelLoaderProps {
   onModelReady: () => void;
@@ -53,10 +54,14 @@ export const ModelLoader = ({ onModelReady }: ModelLoaderProps) => {
   if (status === 'ready') {
     const isGPU = device === 'webgpu';
     const isNative = device === 'native';
+    const loadedTier = getLoadedModelTier();
+    const tierName = loadedTier ? MODEL_TIERS[loadedTier].name : 'Unknown';
+    
     return (
       <div className="flex items-center gap-2 text-sm text-muted-foreground">
         <CheckCircle className="h-4 w-4 text-green-500" />
         <span>Offline voice ready</span>
+        <span className="text-xs text-muted-foreground/70">({tierName})</span>
         <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${
           isNative || isGPU ? 'bg-primary/10 text-primary' : 'bg-muted text-muted-foreground'
         }`}>

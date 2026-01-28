@@ -3,10 +3,10 @@ import { Button } from '@/components/ui/button';
 import { Mic, Square, Loader2, Download, Clock, Check, FileDown } from 'lucide-react';
 import { toast } from 'sonner';
 import { VoskRecognizer, isModelLoaded, loadModel, getSelectedMicrophoneId, isVoskCached } from '@/services/voskRecognition';
-import { loadWhisperModel, transcribeAudio, isWhisperLoaded, WhisperProgressCallback, getActiveDevice, FileProgress } from '@/services/whisperRecognition';
+import { loadWhisperModel, transcribeAudio, isWhisperLoaded, WhisperProgressCallback, getActiveDevice, FileProgress, getLoadedModelTier } from '@/services/whisperRecognition';
 import { processVoiceCommands } from '@/utils/voiceCommands';
 import { AudioWaveform } from '@/components/AudioWaveform';
-import { getModelConfig } from '@/utils/modelConfig';
+import { getModelConfig, getTierConfig, MODEL_TIERS } from '@/utils/modelConfig';
 
 interface VoiceRecorderProps {
   onTranscription: (text: string) => void;
@@ -249,7 +249,7 @@ export const VoiceRecorder = ({ onTranscription }: VoiceRecorderProps) => {
   };
 
   const config = getModelConfig();
-
+  const tierConfig = getTierConfig();
   if (modelStatus === 'idle') {
     return (
       <div className="flex flex-col gap-4">
@@ -262,7 +262,7 @@ export const VoiceRecorder = ({ onTranscription }: VoiceRecorderProps) => {
           Tap to Enable Voice
         </Button>
         <p className="text-xs text-center text-muted-foreground">
-          Downloads {config.whisper.size} voice model (one-time)
+          Downloads {tierConfig.whisper.displayName} ({tierConfig.whisper.size}) - one-time
         </p>
       </div>
     );
@@ -292,10 +292,10 @@ export const VoiceRecorder = ({ onTranscription }: VoiceRecorderProps) => {
           </div>
           <div className="flex-1">
             <p className="text-sm font-medium text-foreground">
-              Downloading {config.whisper.displayName}
+              Downloading {tierConfig.whisper.displayName}
             </p>
             <p className="text-xs text-muted-foreground">
-              One-time download • Cached for offline use
+              {whisperDevice === 'webgpu' ? 'WebGPU accelerated' : 'CPU mode'} • Cached for offline use
             </p>
           </div>
         </div>
