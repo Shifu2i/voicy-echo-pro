@@ -36,12 +36,23 @@ export const VoiceRecorder = ({ onTranscription }: VoiceRecorderProps) => {
   const voskLoadingRef = useRef(false);
 
   // Sync state with module-level model state on mount (persists across navigation)
+  // Also start VOSK loading immediately in background for faster real-time preview
   useEffect(() => {
     if (isWhisperLoaded()) {
       setModelStatus('ready');
       setWhisperDevice(getActiveDevice());
     }
-    setVoskReady(isModelLoaded());
+    
+    // Start VOSK loading immediately in background (it's small ~40MB)
+    if (!isModelLoaded() && !voskLoadingRef.current) {
+      voskLoadingRef.current = true;
+      loadModel()
+        .then(() => setVoskReady(true))
+        .catch(console.error)
+        .finally(() => { voskLoadingRef.current = false; });
+    } else {
+      setVoskReady(isModelLoaded());
+    }
   }, []);
 
   // Load models on demand - load Vosk in parallel for fast preview
